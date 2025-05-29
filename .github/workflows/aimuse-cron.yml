@@ -1,0 +1,33 @@
+name: AIMuse Scheduled Posting
+
+on:
+  schedule:
+    # 9 AM EST (UTC-5): 14:00 UTC
+    - cron: '0 14 * * *'
+    # 6 PM EST (UTC-5): 23:00 UTC
+    - cron: '0 23 * * *'
+    # 9 PM EST (UTC-5): 02:00 UTC (next day)
+    - cron: '0 2 * * *'
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run AIMuse posting script
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          TWITTER_BEARER_TOKEN: ${{ secrets.TWITTER_BEARER_TOKEN }}
+          # add other env vars as needed
+        run: npm run post  # update this if your posting script command differs

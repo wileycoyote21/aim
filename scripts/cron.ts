@@ -1,12 +1,12 @@
-import { createClient } from '../src/db/client';
+import { supabase } from '../src/db/client';
 import { generateThemeForToday } from '../src/themes/generator';
 import { generatePostsForTheme } from '../src/posts/generate';
-import { analyzeAndLogSentiment } from '../src/sentiment/analyze';
-import { postToTwitter } from '../src/twitter/post';
+import { analyzeSentiment } from '../src/sentiment/analyze';
+import { postTweet } from '../src/twitter/post';
 import { getTodayTimestamp } from '../src/utils/timestamp';
 import { generateTrendingPost } from '../src/posts/trending';
 
-const db = createClient();
+const db = supabase;
 
 async function run() {
   try {
@@ -30,23 +30,35 @@ async function run() {
     }
 
     // 5. On every 5th post overall, generate trending-aware post instead
-    const totalPosted = await db
+    const { count } = await db
       .from('posts')
-      .select('*', { count: 'exact', head: true })
-      .then(res => res.count || 0);
+      .select('*', { count: 'exact', head: true });
+
+    const totalPosted = count || 0;
 
     let textToPost = nextPost.text;
 
     if ((totalPosted + 1) % 5 === 0) {
       console.log('Generating trending-aware post...');
-      textToPost = await generateTrendingPost(db, theme);
+      textToPost = await generateTrendingPost();
     }
 
-    // 6. Post to Twitter
-    const tweetId = await postToTwitter(textToPost);
+    // 6. Post to Twitter with error handling
+    const tweetResponse = await postTweet(textToPost);
 
-    // 7. Log post + sentiment
-    await analyzeAndLogSentiment(db, nextPost.id, textToPost, tweetId);
+    if (tweetResponse.errors && tweetResponse.errors.length > 0) {
+      throw new Error(`Twitter post error: ${tweetResponse.errors.map(e => e.message).join(', ')}`);
+    }
+
+    const tweetId = tweetResponse.data?.id;
+
+    if (!tweetId) {
+      throw new Error('No tweet ID returned from Twitter API');
+    }
+
+    // 7. Log sentiment and mark post as posted (includes updating posted_at and tweet_id)
+    await analyzeSentiment(db, nextPost.id, textToPost, tweetId);
+
     console.log(`Posted to Twitter: ${tweetId}`);
   } catch (err) {
     console.error('Error in scheduled run:', err);
@@ -54,3 +66,7 @@ async function run() {
 }
 
 run();
+
+
+
+

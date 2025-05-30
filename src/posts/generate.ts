@@ -1,7 +1,7 @@
 // /src/posts/generate.ts
 
-import { getTodaysTheme } from "../themes/generator";
 import { OpenAI } from "openai";
+import { getTodaysTheme } from "../themes/generator";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -12,8 +12,21 @@ interface Post {
   isTakeaway: boolean;
 }
 
-export async function generatePosts(): Promise<Post[]> {
-  const theme = getTodaysTheme();
+export async function generatePostsForTheme(db: any, theme: string): Promise<any[]> {
+  // Check if posts for today's theme already exist
+  const { data: existingPosts, error } = await db
+    .from("posts")
+    .select("*")
+    .eq("theme", theme);
+
+  if (error) {
+    console.error("Error checking for existing posts:", error);
+    return [];
+  }
+
+  if (existingPosts.length > 0) {
+    return existingPosts;
+  }
 
   const prompt = `
 You are an introspective AI who writes 3 journal-like posts on the theme "${theme}".
@@ -36,12 +49,29 @@ Example output:
   });
 
   try {
-    // The model should respond with JSON string, parse it
     const text = completion.choices[0].message?.content || "[]";
     const posts: Post[] = JSON.parse(text);
-    return posts;
+
+    // Insert generated posts into the DB
+    const { data: insertedPosts, error: insertError } = await db
+      .from("posts")
+      .insert(
+        posts.map((p) => ({
+          text: p.text,
+          is_takeaway: p.isTakeaway,
+          theme,
+        }))
+      )
+      .select();
+
+    if (insertError) {
+      console.error("Error inserting posts:", insertError);
+      return [];
+    }
+
+    return insertedPosts;
   } catch (err) {
-    console.error("Failed to parse posts JSON:", err);
+    console.error("Failed to parse or insert posts:", err);
     return [];
   }
 }

@@ -1,67 +1,72 @@
-import { createClient } from '../db/client';
-import { openai } from '../utils/openai'; // You may need to create a wrapper for OpenAI calls
-import type { Post } from '../db/schema';
+// /src/sentiment/analyze.ts
 
-const supabase = createClient();
+import { OpenAI } from "openai";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
-export interface SentimentResult {
-  polarity: string;   // e.g. 'positive', 'neutral', 'negative'
-  score: number;      // numeric sentiment score
-  summary: string;    // short explanation
+const openai = new OpenAI();
+
+interface SentimentResult {
+  score: number; // e.g., -1 to +1
+  label: string; // e.g., 'positive', 'neutral', 'negative'
 }
 
-/**
- * Analyze sentiment of a given post text using OpenAI
- */
-export async function analyzeSentiment(post: Post): Promise<SentimentResult | null> {
+async function analyzeTextSentiment(text: string): Promise<SentimentResult> {
+  // Basic example using OpenAI text classification for sentiment
+  // Adjust prompt & model to your preference and usage limits
+  const prompt = `Classify the sentiment of this text as positive, neutral, or negative.\nText: """${text}"""`;
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      { role: "system", content: "You are a sentiment analysis assistant." },
+      { role: "user", content: prompt },
+    ],
+    temperature: 0,
+    max_tokens: 10,
+  });
+
+  const reply = response.choices[0].message?.content?.toLowerCase() ?? "";
+
+  let label: SentimentResult["label"] = "neutral";
+  let score: SentimentResult["score"] = 0;
+
+  if (reply.includes("positive")) {
+    label = "positive";
+    score = 1;
+  } else if (reply.includes("negative")) {
+    label = "negative";
+    score = -1;
+  }
+
+  return { score, label };
+}
+
+export async function analyzeSentiment(
+  db: SupabaseClient,
+  postId: string,
+  text: string,
+  tweetId: string
+) {
   try {
-    const prompt = `Analyze the sentiment of the following text and respond with polarity (positive, neutral, negative), a score from -1 to 1, and a brief summary:\n\n"${post.content}"`;
+    const sentiment = await analyzeTextSentiment(text);
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',  // or your preferred model
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: 60,
-      temperature: 0,
-    });
-
-    const reply = response.choices[0].message?.content;
-
-    // Simple parse - you may want to improve this parsing logic
-    // Example expected reply format:
-    // Polarity: positive
-    // Score: 0.8
-    // Summary: The text expresses a positive and hopeful tone.
-
-    if (!reply) return null;
-
-    const polarityMatch = reply.match(/Polarity:\s*(positive|neutral|negative)/i);
-    const scoreMatch = reply.match(/Score:\s*(-?0?\.\d+|-?1(\.0+)?)/i);
-    const summaryMatch = reply.match(/Summary:\s*(.+)/i);
-
-    const sentiment: SentimentResult = {
-      polarity: polarityMatch?.[1].toLowerCase() ?? 'neutral',
-      score: scoreMatch ? parseFloat(scoreMatch[1]) : 0,
-      summary: summaryMatch?.[1].trim() ?? '',
-    };
-
-    // Insert sentiment record into DB
-    const { error } = await supabase
-      .from('sentiments')
-      .insert({
-        post_id: post.id,
-        polarity: sentiment.polarity,
-        score: sentiment.score,
-        summary: sentiment.summary,
-        created_at: new Date().toISOString(),
-      });
+    const { error } = await db
+      .from("posts")
+      .update({
+        sentiment_score: sentiment.score,
+        sentiment_label: sentiment.label,
+        posted_at: new Date().toISOString(),
+        tweet_id: tweetId,
+      })
+      .eq("id", postId);
 
     if (error) {
-      console.error('Error inserting sentiment:', error);
+      throw new Error(`Failed to update post: ${error.message}`);
     }
-
-    return sentiment;
-  } catch (error) {
-    console.error('Sentiment analysis failed:', error);
-    return null;
+  } catch (err) {
+    console.error("Error in analyzeSentiment:", err);
+    throw err;
   }
 }
+
+

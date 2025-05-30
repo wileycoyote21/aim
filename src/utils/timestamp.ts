@@ -1,5 +1,3 @@
-// /src/utils/timestamp.ts
-
 /**
  * Returns the current UTC timestamp as an ISO string.
  */
@@ -32,3 +30,11 @@ export function getUtcDaysAgoIso(days: number): string {
   const pastDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
   return pastDate.toISOString();
 }
+
+/**
+ * Returns today's start timestamp as an ISO string.
+ */
+export function getTodayTimestamp(): string {
+  return getUtcStartOfToday().toISOString();
+}
+

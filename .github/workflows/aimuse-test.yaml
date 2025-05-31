@@ -23,6 +23,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           TWITTER_BEARER_TOKEN: ${{ secrets.TWITTER_BEARER_TOKEN }}
-          # add other env vars as needed
-        run: npm run post  # or your actual post script command
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: npm run post
+
 

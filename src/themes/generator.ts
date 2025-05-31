@@ -1,5 +1,3 @@
-// src/themes/generator.ts
-
 const themes = [
   "vulnerability",
   "curiosity",
@@ -36,7 +34,7 @@ const themes = [
 /**
  * Return today's theme based on date logic
  */
-function getTodaysTheme(date = new Date()): string {
+export function getTodaysTheme(date = new Date()): string {
   const dayOfMonth = date.getUTCDate();
   const index = (dayOfMonth - 1) % themes.length;
   return themes[index];
@@ -74,3 +72,4 @@ export async function generateThemeForToday(db: any, today: string): Promise<str
 export function getAllThemes(): string[] {
   return [...themes];
 }
+

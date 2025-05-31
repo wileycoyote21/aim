@@ -1,25 +1,28 @@
 name: AIMuse Test Workflow
 
 on:
-  workflow_dispatch:   # Manual trigger for easy testing
+  workflow_dispatch:
 
 jobs:
-  test-env:
+  test-post:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repo
+      - name: Checkout repo
         uses: actions/checkout@v3
 
-      - name: Show Supabase env vars
-        run: |
-          echo "SUPABASE_URL=$SUPABASE_URL"
-          echo "SUPABASE_KEY=$SUPABASE_KEY"
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
 
-      - name: Run posting script
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run AIMuse posting script
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        run: npm run post
+          TWITTER_BEARER_TOKEN: ${{ secrets.TWITTER_BEARER_TOKEN }}
+          # add other env vars as needed
+        run: npm run post  # or your actual post script command
+

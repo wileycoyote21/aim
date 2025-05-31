@@ -1,3 +1,7 @@
+// cron.ts
+
+import 'dotenv/config'; // ⬅️ This ensures environment variables load locally and on GitHub Actions
+
 import { supabase } from '../src/db/client';
 import { generateThemeForToday } from '../src/themes/generator';
 import { generatePostsForTheme } from '../src/posts/generate';
@@ -56,7 +60,7 @@ async function run() {
       throw new Error('No tweet ID returned from Twitter API');
     }
 
-    // 7. Log sentiment and mark post as posted (includes updating posted_at and tweet_id)
+    // 7. Log sentiment and mark post as posted
     await analyzeSentiment(db, nextPost.id, textToPost, tweetId);
 
     console.log(`Posted to Twitter: ${tweetId}`);
@@ -66,6 +70,7 @@ async function run() {
 }
 
 run();
+
 
 
 

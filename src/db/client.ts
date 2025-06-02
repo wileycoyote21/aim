@@ -1,15 +1,30 @@
-// src/db/client.ts
+// src/twitter/client.ts
+import dotenv from "dotenv";
+dotenv.config();
 
-import 'dotenv/config';  // Load .env variables immediately
-import { createClient } from '@supabase/supabase-js';
+console.log("TWITTER_API_KEY:", process.env.TWITTER_API_KEY);
+console.log("TWITTER_API_SECRET:", process.env.TWITTER_API_SECRET);
+console.log("TWITTER_ACCESS_TOKEN:", process.env.TWITTER_ACCESS_TOKEN);
+console.log("TWITTER_ACCESS_TOKEN_SECRET:", process.env.TWITTER_ACCESS_TOKEN_SECRET);
 
-const supabaseUrl = process.env.SUPABASE_URL!;
-const supabaseKey = process.env.SUPABASE_KEY!;
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error('Missing Supabase environment variables');
+if (
+  !process.env.TWITTER_API_KEY ||
+  !process.env.TWITTER_API_SECRET ||
+  !process.env.TWITTER_ACCESS_TOKEN ||
+  !process.env.TWITTER_ACCESS_TOKEN_SECRET
+) {
+  throw new Error("Missing Twitter API credentials in environment variables");
 }
 
-export const supabase = createClient(supabaseUrl, supabaseKey);
+// Your existing client setup below here...
+// For example:
+// import { TwitterApi } from 'twitter-api-v2';
+// export const twitterClient = new TwitterApi({
+//   appKey: process.env.TWITTER_API_KEY,
+//   appSecret: process.env.TWITTER_API_SECRET,
+//   accessToken: process.env.TWITTER_ACCESS_TOKEN,
+//   accessSecret: process.env.TWITTER_ACCESS_TOKEN_SECRET,
+// });
+
 
 

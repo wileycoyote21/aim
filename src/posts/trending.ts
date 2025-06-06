@@ -1,4 +1,4 @@
-import { openai } from "../utils/openaiClient"; // you'll want to create a reusable OpenAI client helper
+import { openaiClient } from "../utils/openaiClient"; // you'll want to create a reusable OpenAI client helper
 import { getTrendingTopics } from "../utils/trends"; // placeholder for your trends fetching logic
 
 /**

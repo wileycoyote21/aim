@@ -22,7 +22,7 @@ export async function generateTrendingPost(): Promise<string> {
       Post:
     `;
 
-    const completion = await openaiClient.createChatCompletion({
+    const completion = await openaiClient.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
       temperature: 0.7,

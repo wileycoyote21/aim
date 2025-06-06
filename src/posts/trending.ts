@@ -29,7 +29,7 @@ export async function generateTrendingPost(): Promise<string> {
       max_tokens: 60,
     });
 
-    const post = completion.data.choices[0]?.message?.content?.trim() ?? "";
+    const post = completion.choices[0]?.message?.content?.trim() ?? "";
     return post || "even in trends, some stories are quietly unfolding.";
   } catch (error) {
     console.error("Error generating trending post:", error);

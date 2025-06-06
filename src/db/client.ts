@@ -1,38 +1,22 @@
-// src/twitter/client.ts
-import { TwitterApi } from "twitter-api-v2";
-import dotenv from "dotenv";
+// src/db/client.ts - This file should set up your Supabase client
+import { createClient } from '@supabase/supabase-js'; // Make sure you have @supabase/supabase-js installed
 
-dotenv.config();
+// Load environment variables (useful for local development, though CI/CD injects them)
+import 'dotenv/config'; 
 
-// Optional: Helpful logging during local development
-console.log("TWITTER_API_KEY:", process.env.TWITTER_API_KEY ? "[set]" : "[missing]");
-console.log("TWITTER_API_SECRET:", process.env.TWITTER_API_SECRET ? "[set]" : "[missing]");
-console.log("TWITTER_ACCESS_TOKEN:", process.env.TWITTER_ACCESS_TOKEN ? "[set]" : "[missing]");
-console.log("TWITTER_ACCESS_TOKEN_SECRET:", process.env.TWITTER_ACCESS_TOKEN_SECRET ? "[set]" : "[missing]");
+// Get Supabase credentials from environment variables
+const supabaseUrl = process.env.https://nwadzhjjulybxzvaccnk.supabase.co;
+const supabaseKey = process.env.eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im53YWR6aGpqdWx5Ynh6dmFjY25rIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0ODQ2MDIxMiwiZXhwIjoyMDY0MDM2MjEyfQ.wO6bdOHIuiJ6DXicaFQ9VhVfj4GOeskEd4pdOgkWiNc;
 
-// Required for posting to Twitter
-const {
-  TWITTER_API_KEY,
-  TWITTER_API_SECRET,
-  TWITTER_ACCESS_TOKEN,
-  TWITTER_ACCESS_TOKEN_SECRET,
-} = process.env;
-
-if (
-  !TWITTER_API_KEY ||
-  !TWITTER_API_SECRET ||
-  !TWITTER_ACCESS_TOKEN ||
-  !TWITTER_ACCESS_TOKEN_SECRET
-) {
-  throw new Error("Missing Twitter API credentials in environment variables");
+// Basic check to ensure credentials exist
+if (!supabaseUrl || !supabaseKey) {
+  throw new Error('Missing Supabase credentials in environment variables (SUPABASE_URL, SUPABASE_KEY)');
 }
 
-export const twitterClient = new TwitterApi({
-  appKey: TWITTER_API_KEY,
-  appSecret: TWITTER_API_SECRET,
-  accessToken: TWITTER_ACCESS_TOKEN,
-  accessSecret: TWITTER_ACCESS_TOKEN_SECRET,
-});
+// Initialize and export the Supabase client instance
+export const supabase = createClient(supabaseUrl, supabaseKey);
+
+console.log("Supabase Client initialized."); // Optional: for debugging
 
 
 

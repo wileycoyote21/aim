@@ -5,7 +5,7 @@ import { createClient } from '@supabase/supabase-js'; // Make sure you have @sup
 import 'dotenv/config'; 
 
 // Get Supabase credentials from environment variables
-const supabaseUrl = process.env.https://nwadzhjjulybxzvaccnk.supabase.co;
+const supabaseUrl = process.env.SUPABASE_URL; // <--- FIXED LINE!
 const supabaseKey = process.env.SUPABASE_KEY;
 
 // Basic check to ensure credentials exist
@@ -14,7 +14,7 @@ if (!supabaseUrl || !supabaseKey) {
 }
 
 // Initialize and export the Supabase client instance
-export const supabase = createClient(supabaseUrl, supabaseKey);
+export const supabase = createClient(supabaseUrl as string, supabaseKey as string); // Added 'as string' for safety
 
 console.log("Supabase Client initialized."); // Optional: for debugging
 

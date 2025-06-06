@@ -6,7 +6,7 @@ import 'dotenv/config';
 
 // Get Supabase credentials from environment variables
 const supabaseUrl = process.env.https://nwadzhjjulybxzvaccnk.supabase.co;
-const supabaseKey = process.env.eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im53YWR6aGpqdWx5Ynh6dmFjY25rIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0ODQ2MDIxMiwiZXhwIjoyMDY0MDM2MjEyfQ.wO6bdOHIuiJ6DXicaFQ9VhVfj4GOeskEd4pdOgkWiNc;
+const supabaseKey = process.env.SUPABASE_KEY;
 
 // Basic check to ensure credentials exist
 if (!supabaseUrl || !supabaseKey) {

@@ -64,10 +64,10 @@ Example output:
       response_format: { type: "json_object" } // Explicitly request JSON object
     });
 
-    // 4. Extract content and clean it from potential Markdown wrappers
-    let rawText = completion.choices[0].message?.content || "[]";
+    // 4. Extract raw content from OpenAI response
+    let rawText = completion.choices[0].message?.content || "{}"; // Changed default to '{}' for object
 
-    // Clean the string: remove markdown code block delimiters if present
+    // 5. Clean the string: remove markdown code block delimiters if present
     // This is crucial for handling OpenAI's tendency to wrap JSON in ```json...```
     if (rawText.startsWith('```json')) {
       rawText = rawText.substring(7, rawText.length - 3).trim(); // Remove '```json' and '```'
@@ -75,23 +75,39 @@ Example output:
       rawText = rawText.substring(3, rawText.length - 3).trim(); // Remove '```' from both ends
     }
 
-    // 5. Parse the cleaned string into a JSON array of Post objects
-    const posts: Post[] = JSON.parse(rawText);
+    // 6. Parse the cleaned string into a JSON object and extract the 'posts' array
+    // This handles cases where OpenAI wraps the array inside an object like { "posts": [...] }
+    let parsedResponse: any;
+    try {
+        parsedResponse = JSON.parse(rawText);
+    } catch (parseError) {
+        console.error("Failed to parse rawText into JSON:", rawText, parseError);
+        throw new Error("Invalid JSON from OpenAI. Check rawText format.");
+    }
+    
+    // Ensure that parsedResponse.posts exists and is an array
+    if (!parsedResponse || !Array.isArray(parsedResponse.posts)) {
+        console.error("OpenAI response did not contain a 'posts' array as expected:", parsedResponse);
+        throw new Error("Unexpected OpenAI response format. Expected an object with a 'posts' array.");
+    }
+    
+    const posts: Post[] = parsedResponse.posts; // Extract the actual array from the 'posts' property
     console.log("Successfully parsed posts from OpenAI:", posts);
 
-    // 6. Map the generated posts to the database schema (isTakeaway -> is_takeaway)
+    // 7. Map the generated posts to the database schema (isTakeaway -> is_takeaway)
     const postsToInsert = posts.map((p) => ({
       text: p.text,
       is_takeaway: p.isTakeaway, // Map isTakeaway from interface to is_takeaway for DB
-      theme, // Include the theme
+      theme, // Include the theme from the cron job
       // Add other required columns like 'created_at', 'posted_at', 'sentiment_score', 'tweet_id'
       // if they are NOT NULL and don't have default values in your Supabase 'posts' table.
       // For 'posted_at', it should initially be null.
       // For 'created_at', it usually has a 'now()' default in Supabase.
       // For 'sentiment_score' and 'tweet_id', they should be nullable/have defaults if not available at creation.
+      // If your Supabase table has a 'created_at' column with default 'now()', you don't need to add it here.
     }));
 
-    // 7. Insert generated posts into the database
+    // 8. Insert generated posts into the database
     const { data: insertedPosts, error: insertError } = await db
       .from("posts")
       .insert(postsToInsert)
@@ -107,7 +123,7 @@ Example output:
     console.log("Successfully inserted posts into the database:", insertedPosts);
     return insertedPosts; // Return the posts that were actually inserted
   } catch (err) {
-    console.error("Failed to parse or insert posts:", err);
+    console.error("Failed to generate or insert posts:", err); // More generic error message
     // Re-throw or handle the error appropriately if it's critical.
     // For now, returning an empty array.
     return [];

@@ -1,7 +1,7 @@
 // scripts/cron.ts
 
 import { db } from '../src/db/client'; // Your Supabase client setup
-import { TwitterApi } from 'twitter-api-v2'; // <--- NEW IMPORT: twitter-api-v2
+import { TwitterApi } from 'twitter-api-v2'; // NEW IMPORT: twitter-api-v2
 import { generatePostsForTheme } from '../src/posts/generate';
 import { generateTrendingPost } from '../src/posts/trending'; // This file needs to exist and export this function!
 
@@ -34,7 +34,7 @@ async function runScheduledJob() {
   try {
     console.log('--- Starting Scheduled Job ---');
     console.log('Supabase Client initialized.');
-    console.log('Twitter Client initialized.'); // Now it's a global client again, initialized correctly for v1.1
+    console.log('Twitter Client initialized.');
 
     // 1. Get the current active theme
     const { data: themes, error: themesError } = await db
@@ -155,8 +155,8 @@ async function postTweetToTwitter(tweetText: string) {
     }
 
     // Use the v1.1 client for posting tweets
-    const { data } = await twitterClient.v1.tweet(tweetText); // <--- FIX: Use twitter-api-v2's v1.tweet()
-    console.log('Twitter API response:', data);
+    const data = await twitterClient.v1.tweet(tweetText); // <--- FIX: Removed destructuring '{ data }'
+    console.log('Twitter API response:', data); // Now 'data' is the TweetV1 object
     return data;
   } catch (e: any) {
     console.error('Error during Twitter API call in postTweetToTwitter:', e);

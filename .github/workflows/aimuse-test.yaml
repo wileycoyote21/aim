@@ -1,13 +1,5 @@
 name: Post AI Muse Tweets
 
-on:
-  schedule:
-    # 8 AM EST = 12:00 UTC
-    - cron: '0 12 * * *'
-    # 8 PM EST = 00:00 UTC (next day UTC)
-    - cron: '0 0 * * *'
-    # 11 PM EST = 03:00 UTC
-    - cron: '0 3 * * *'
   workflow_dispatch:
 
 jobs:

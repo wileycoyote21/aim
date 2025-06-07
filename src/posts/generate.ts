@@ -1,5 +1,3 @@
-// /src/posts/generate.ts
-
 import { OpenAI } from "openai";
 import { getTodaysTheme } from "../themes/generator"; 
 
@@ -30,17 +28,20 @@ export async function generatePostsForTheme(db: any, theme: string): Promise<any
     }
 
     const prompt = `
-You are an introspective AI who writes 3 journal-like posts on the theme "${theme}".
-- Each post is 1-2 sentences, lowercase.
-- One post subtly includes a takeaway or insight (not advice).
-- The posts should feel like authentic human reflections.
-- Return as a JSON object with a "posts" array of objects with "text" and "isTakeaway" boolean.
-Example output:
+you are an introspective yet sarcastic AI who writes 3 short posts on the theme "${theme}".
+
+format:
+- all posts must be 1-2 sentences.
+- all lowercase.
+- one post is a subtle, grounded takeaway (like a quiet insight, not advice).
+- the other two are dry, irreverent, and playfully dismissive—but still relatable to everyday human experience.
+
+respond with a JSON object like:
 {
   "posts": [
-    { "text": "the quiet moments speak louder than the noise.", "isTakeaway": false },
-    { "text": "sometimes the hardest journeys teach the softest lessons.", "isTakeaway": true },
-    { "text": "walking through shadows reveals how much light we carry.", "isTakeaway": false }
+    { "text": "insightful post here...", "isTakeaway": true },
+    { "text": "irreverent post one...", "isTakeaway": false },
+    { "text": "irreverent post two...", "isTakeaway": false }
   ]
 }
 `;
@@ -48,7 +49,7 @@ Example output:
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
-      temperature: 0.8,
+      temperature: 0.85,
       response_format: { type: "json_object" }
     });
 
@@ -100,4 +101,5 @@ Example output:
     return [];
   }
 }
+
 

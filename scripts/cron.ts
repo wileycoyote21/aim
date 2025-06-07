@@ -65,7 +65,10 @@ async function run() {
 
     console.log(`Posted to Twitter: ${tweetId}`);
   } catch (err) {
-    console.error('Error in scheduled run:', err);
+    console.error('Error in scheduled run:', err instanceof Error ? err.message : JSON.stringify(err));
+    if (err instanceof Error && err.stack) {
+      console.error('Stack trace:', err.stack);
+    }
   }
 }
 

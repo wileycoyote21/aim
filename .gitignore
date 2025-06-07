@@ -1,2 +1,62 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Environment variables
 .env
+.env.local
+.env.production
+.env.*.local
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 .DS_Store
+
+# TypeScript
+*.tsbuildinfo
+dist/
+build/
+out/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+coverage/
+.nyc_output/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Supabase
+.supabase/
+supabase/.branches/
+supabase/.temp/
+
+# Debug scripts
+scripts/test-*.ts
+scripts/debug-*.ts
+scripts/verify-*.ts
+scripts/setup-*.ts
+!scripts/test-supabase.ts
+!scripts/check-env.ts
+
+# OS files
+Thumbs.db
+
+# Package manager locks (keep one)
+# Uncomment the ones you don't use
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml

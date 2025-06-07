@@ -61,8 +61,8 @@ export async function generateThemeForToday(db: any, today: string): Promise<str
   const { error: insertError } = await db.from("themes").insert([{ date: today, theme }]);
 
   if (insertError) {
-    console.error("Failed to insert theme for today:", insertError.message);
-    throw insertError;
+    console.error("Failed to insert theme for today:", insertError);
+    throw new Error(`Failed to insert theme: ${JSON.stringify(insertError)}`);
   }
 
   return theme;

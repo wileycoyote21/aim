@@ -1,5 +1,8 @@
 name: Post AI Muse Tweets
 
+on:
+  # This event allows you to run this workflow manually from the Actions tab in GitHub.
+  # When you click "Run workflow", it will execute the steps to attempt to post a tweet.
   workflow_dispatch:
 
 jobs:
@@ -26,8 +29,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run daily post script
-        run: npm run post
+      - name: Run daily post script (manual trigger for actual tweet)
+        run: |
+          echo "Executing npm run post to attempt an actual tweet."
+          npm run post
 
 
 

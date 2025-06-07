@@ -1,7 +1,7 @@
 // scripts/cron.ts
 
 import { db } from '../src/db/client'; // Your Supabase client setup
-import TwitterClient from 'twitter-api-sdk'; // Correct default import for TwitterClient
+import { TwitterApi } from 'twitter-api-v2'; // <--- NEW IMPORT: twitter-api-v2
 import { generatePostsForTheme } from '../src/posts/generate';
 import { generateTrendingPost } from '../src/posts/trending'; // This file needs to exist and export this function!
 
@@ -20,13 +20,12 @@ interface Post {
     created_at: string;
 }
 
-// Initialize Twitter Client with OAuth 1.0a credentials
-// NOTE: Use app_key and app_secret for consumer keys/secrets with twitter-api-sdk
-const twitterClient = new TwitterClient({
-  app_key: process.env.TWITTER_API_KEY || '',     // Renamed consumer_key
-  app_secret: process.env.TWITTER_API_SECRET || '', // Renamed consumer_secret
-  access_token: process.env.TWITTER_ACCESS_TOKEN || '',
-  access_secret: process.env.TWITTER_ACCESS_TOKEN_SECRET || '', // Renamed access_token_secret
+// Initialize Twitter Client with OAuth 1.0a credentials using twitter-api-v2
+const twitterClient = new TwitterApi({
+  appKey: process.env.TWITTER_API_KEY as string,            // consumer_key is now appKey
+  appSecret: process.env.TWITTER_API_SECRET as string,      // consumer_secret is now appSecret
+  accessToken: process.env.TWITTER_ACCESS_TOKEN as string,
+  accessSecret: process.env.TWITTER_ACCESS_TOKEN_SECRET as string, // access_token_secret is now accessSecret
 });
 
 
@@ -137,8 +136,11 @@ async function runScheduledJob() {
     if (error.stack) {
       console.error('Stack trace:', error.stack);
     }
-    if (error.data && error.data.detail) {
-        console.error("Twitter API Specific Error Detail:", error.data.detail);
+    // Twitter API errors often have a 'data' property with more details
+    if (error.data && error.data.errors) {
+        console.error("Twitter API Error Details:", JSON.stringify(error.data.errors, null, 2));
+    } else if (error.message.includes('Twitter API error')) {
+        console.error("Consider checking Twitter App dashboard or API response for rate limits/permissions.");
     }
     console.error('--- End Error ---');
     process.exit(1);
@@ -152,14 +154,13 @@ async function postTweetToTwitter(tweetText: string) {
         console.warn(`Tweet text is too long (${tweetText.length} chars). It might be truncated by Twitter.`);
     }
 
-    // Use the v1.1 client for posting tweets (OAuth 1.0a)
-    // The credentials were already set in the global twitterClient instance
-    const { data } = await twitterClient.v1.tweet(tweetText); // <--- FIX: Use v1.tweet() method
+    // Use the v1.1 client for posting tweets
+    const { data } = await twitterClient.v1.tweet(tweetText); // <--- FIX: Use twitter-api-v2's v1.tweet()
     console.log('Twitter API response:', data);
     return data;
   } catch (e: any) {
     console.error('Error during Twitter API call in postTweetToTwitter:', e);
-    throw e;
+    throw e; // Re-throw for main catch block
   }
 }
 

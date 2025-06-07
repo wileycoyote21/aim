@@ -1,11 +1,11 @@
 // scripts/cron.ts
 
-import { db } from '../src/db/client';
-import TwitterClient from 'twitter-api-sdk'; // Correct default import
+import { db } from '../src/db/client'; // Your Supabase client setup
+import TwitterClient from 'twitter-api-sdk'; // Correct default import for TwitterClient
 import { generatePostsForTheme } from '../src/posts/generate';
-import { generateTrendingPost } from '../src/posts/trending';
+import { generateTrendingPost } from '../src/posts/trending'; // This file needs to exist and export this function!
 
-// Ensure interfaces match your Supabase table structures
+// Ensure these interfaces match your Supabase table structures consistently across your project
 interface Theme {
   id: number;
   name: string;
@@ -20,16 +20,22 @@ interface Post {
     created_at: string;
 }
 
-// REMOVE or SIMPLIFY this global twitterClient initialization
-// const twitterClient = new TwitterClient({ /* ... */ });
-// We'll handle authentication directly in the postTweetToTwitter function
+// Initialize Twitter Client with OAuth 1.0a credentials
+// NOTE: Use app_key and app_secret for consumer keys/secrets with twitter-api-sdk
+const twitterClient = new TwitterClient({
+  app_key: process.env.TWITTER_API_KEY || '',     // Renamed consumer_key
+  app_secret: process.env.TWITTER_API_SECRET || '', // Renamed consumer_secret
+  access_token: process.env.TWITTER_ACCESS_TOKEN || '',
+  access_secret: process.env.TWITTER_ACCESS_TOKEN_SECRET || '', // Renamed access_token_secret
+});
+
 
 // Main function to run the scheduled job
 async function runScheduledJob() {
   try {
     console.log('--- Starting Scheduled Job ---');
     console.log('Supabase Client initialized.');
-    // console.log('Twitter Client initialized.'); // No longer a global client
+    console.log('Twitter Client initialized.'); // Now it's a global client again, initialized correctly for v1.1
 
     // 1. Get the current active theme
     const { data: themes, error: themesError } = await db
@@ -146,21 +152,9 @@ async function postTweetToTwitter(tweetText: string) {
         console.warn(`Tweet text is too long (${tweetText.length} chars). It might be truncated by Twitter.`);
     }
 
-    // Initialize TwitterClient here, passing OAuth 1.0a credentials directly to the API call
-    const client = new TwitterClient({
-      // You can leave this empty or pass a bearer_token if you also use v2 API features
-      // For posting tweets (v1.1 endpoint), the oauth object is passed directly to the method.
-    });
-
-    const { data } = await client.tweets.createTweet({
-      text: tweetText,
-      oauth: { // <--- FIX: Pass OAuth 1.0a credentials directly in the method call
-        consumer_key: process.env.TWITTER_API_KEY || '',
-        consumer_secret: process.env.TWITTER_API_SECRET || '',
-        access_token: process.env.TWITTER_ACCESS_TOKEN || '',
-        access_token_secret: process.env.TWITTER_ACCESS_TOKEN_SECRET || '',
-      },
-    });
+    // Use the v1.1 client for posting tweets (OAuth 1.0a)
+    // The credentials were already set in the global twitterClient instance
+    const { data } = await twitterClient.v1.tweet(tweetText); // <--- FIX: Use v1.tweet() method
     console.log('Twitter API response:', data);
     return data;
   } catch (e: any) {

@@ -1,180 +1,180 @@
-// cron.ts
+// scripts/cron.ts
 
-import 'dotenv/config'; // ⬅️ This ensures environment variables load locally and on GitHub Actions
-
-import { supabase } from '../src/db/client';
-import { generateThemeForToday } from '../src/themes/generator';
+import { db } from '../src/db/client'; // Your Supabase client setup
+import { TwitterClient } from 'twitter-api-sdk'; // Assuming this is your Twitter SDK
 import { generatePostsForTheme } from '../src/posts/generate';
-import { analyzeSentiment } from '../src/sentiment/analyze';
-import { postTweet } from '../src/twitter/post';
-import { getTodayTimestamp } from '../src/utils/timestamp';
-import { generateTrendingPost } from '../src/posts/trending'; // Assuming this function exists and returns string
+import { generateTrendingPost } from '../src/posts/trending'; // IMPORTANT: This file needs to exist and export this function!
 
-// Define a type for the theme object expected from generateThemeForToday
+// Ensure these interfaces match your Supabase table structures
 interface Theme {
-  id: number; // Assuming ID is a number (Supabase primary key integer)
-  name: string; // The actual theme string like "fear"
+  id: string; // Or number, depending on your actual Supabase 'themes' table ID type
+  name: string;
+  is_active: boolean;
 }
 
-// Define a type for a single post object
 interface Post {
-    id: number; // Assuming ID is a number
+    id: string; // Or number
     text: string;
-    posted_at: string | null; // Null if not yet posted, ISO string if posted
-    // Add other properties that a post might have if needed for logic here
+    theme: string;
+    posted_at: string | null;
+    created_at: string;
 }
 
-// Define a more specific type for Twitter API responses
-interface TwitterApiResponse {
-    data?: {
-        id: string; // Tweet ID from Twitter
-        text: string;
-    };
-    errors?: Array<{
-        message: string;
-        code?: number;
-        data?: any; // For the detailed error object from Twitter API
-    }>;
-}
+// Initialize Twitter Client using environment variables
+// Ensure these environment variables are set in your GitHub Actions secrets
+const twitterClient = new TwitterClient({
+  consumer_key: process.env.TWITTER_API_KEY || '',
+  consumer_secret: process.env.TWITTER_API_SECRET || '',
+  access_token: process.env.TWITTER_ACCESS_TOKEN || '',
+  access_token_secret: process.env.TWITTER_ACCESS_TOKEN_SECRET || '',
+});
 
-
-const db = supabase;
-
-async function run() {
+// Main function to run the scheduled job
+async function runScheduledJob() {
   try {
-    const today = getTodayTimestamp();
+    console.log('--- Starting Scheduled Job ---');
+    console.log('Supabase Client initialized.');
+    console.log('Twitter Client initialized.');
 
-    // 1. Get or generate today's theme
-    // generateThemeForToday now returns { id: number, name: string }
-    const theme: Theme = await generateThemeForToday(db, today);
-    console.log(`Using theme: "${theme.name}" (ID: ${theme.id})`);
+    // 1. Get the current active theme
+    // Assumes you have a 'themes' table and one active theme at a time
+    const { data: themes, error: themesError } = await db
+      .from('themes')
+      .select('*')
+      .eq('is_active', true)
+      .limit(1);
 
-    // 2. Generate posts for the theme if they don't already exist in DB
-    const posts: Post[] = await generatePostsForTheme(db, theme); // Ensure generatePostsForTheme expects Theme object
-    console.log(`Found/Generated ${posts.length} posts for theme "${theme.name}".`);
+    if (themesError || !themes || themes.length === 0) {
+      throw new Error(`Failed to fetch active theme or no active theme found: ${JSON.stringify(themesError)}`);
+    }
 
-    // 3. Select the next unposted message (from the theme-specific posts)
-    const nextThemePost = posts.find(p => !p.posted_at);
+    const currentTheme: Theme = themes[0];
+    console.log(`Using theme: "${currentTheme.name}" (ID: ${currentTheme.id})`);
 
-    // 4. Get the total count of all posts (including previously posted trending ones)
-    const { count: totalPostedCount, error: countError } = await db
+    // 2. Generate/fetch posts for the current theme
+    // This function will generate new posts if none exist for the theme,
+    // otherwise, it will return the existing unposted ones.
+    const posts = await generatePostsForTheme(db, currentTheme);
+
+    // 3. Determine if it's time for a "trending" post or a regular theme post
+    const { count: totalPosted, error: countError } = await db
       .from('posts')
-      .select('*', { count: 'exact', head: true });
+      .select('*', { count: 'exact' })
+      .not('posted_at', 'is', null); // Count all posts that have been marked as posted
 
     if (countError) {
-      throw new Error(`Failed to get total post count: ${countError.message}`);
+      console.error('Error counting total posted tweets:', countError);
+      throw new Error(`Failed to count total posted tweets: ${JSON.stringify(countError)}`);
     }
 
-    const totalPosted = totalPostedCount || 0;
-    console.log(`Total posts historically sent (from DB count): ${totalPosted}`);
+    console.log(`Total tweets posted across all themes: ${totalPosted}`);
 
-    let finalPostId: number; // This will be the ID of the post record that gets updated
-    let finalTweetText: string; // This will be the actual text sent to Twitter
+    let postToTweet: Post | null = null;
+    let isTrendingPost = false; // Flag to indicate if the post is a trending one (not stored in 'posts' table)
 
-    // 5. Decide whether to generate a trending-aware post or use a regular theme post
-    if ((totalPosted + 1) % 5 === 0) { // Check if it's time for a trending post
-      console.log('It is time for a trending-aware post. Generating...');
-      const trendingText = await generateTrendingPost(); // Generate the trending post text
-
-      // --- CRUCIAL: Check if this trending post text already exists in your DB ---
-      const { data: existingTrendingPosts, error: fetchExistingError } = await db
-        .from('posts')
-        .select('id, text')
-        .eq('text', trendingText); // Simple exact match for now; consider normalization if needed
-
-      if (fetchExistingError) {
-        throw new Error(`Failed to check for existing trending posts in DB: ${fetchExistingError.message}`);
+    // Logic for a special "trending post" every 5th tweet
+    // (totalPosted || 0) ensures it treats null/undefined as 0
+    if ((totalPosted || 0) % 5 === 0 && (totalPosted || 0) !== 0) {
+      console.log('It\'s time for a special trending post!');
+      // Call your function to generate a trending post
+      // NOTE: `generateTrendingPost` should return a temporary post object,
+      // as these are often not stored in the main 'posts' table.
+      const trendingContent = await generateTrendingPost(db); // Pass the database client if needed for trending logic
+      if (trendingContent) {
+          postToTweet = {
+              id: 'trending-' + Date.now(), // Give it a temporary ID
+              text: trendingContent,
+              theme: 'trending', // Assign a conceptual theme
+              created_at: new Date().toISOString(),
+              posted_at: null // Not "posted" in the database sense
+          };
+          isTrendingPost = true;
       }
+    }
 
-      if (existingTrendingPosts && existingTrendingPosts.length > 0) {
-        console.warn(`WARNING: Generated trending post "${trendingText}" already exists in the database. Skipping tweet to avoid Twitter API duplicate error.`);
-        return; // Exit if duplicate found
-      }
+    // If not a trending post day, or trending post generation failed, get next theme post
+    if (!postToTweet) {
+      const nextThemePost = posts.find(p => !p.posted_at);
 
-      // If unique, save the trending post to the database first
-      const { data: newPostData, error: insertError } = await db
-        .from('posts')
-        .insert({
-          theme_id: theme.id, // Associate with the current theme ID
-          text: trendingText,
-          created_at: new Date().toISOString(), // Timestamp for creation
-          // Consider adding a 'type' column (e.g., 'theme', 'trending') here for better classification
-        })
-        .select('id') // Select the ID of the newly inserted row
-        .single(); // Expecting one row to be returned
-
-      if (insertError) {
-        throw new Error(`Failed to save new trending post to DB: ${insertError.message}`);
-      }
-
-      finalPostId = newPostData.id;
-      finalTweetText = trendingText;
-      console.log(`Saved new trending post to DB with ID: ${finalPostId}`);
-
-    } else {
-      // If not a trending post, ensure there's a next unposted theme post
       if (!nextThemePost) {
-        console.log('All regular theme posts already published for today and not time for a trending post.');
-        return;
+        console.warn(`All posts for theme "${currentTheme.name}" have been posted. This run might not tweet.`);
+        console.warn('Next run will likely generate new posts for this theme if `generatePostsForTheme` is designed for it.');
+        throw new Error(`No unposted messages found for theme "${currentTheme.name}". Cannot tweet today.`);
       }
-      finalPostId = nextThemePost.id;
-      finalTweetText = nextThemePost.text;
-      console.log(`Using next regular theme post (ID: ${finalPostId}).`);
+      postToTweet = nextThemePost;
+      console.log(`Using next regular theme post (ID: ${postToTweet.id}).`);
     }
 
-    // --- Prepare and send tweet ---
-    console.log('\n--- Attempting to post tweet ---');
+    if (!postToTweet || !postToTweet.text) {
+      throw new Error('No valid post content available to tweet.');
+    }
+
+    // 4. Post the tweet to Twitter
+    console.log('Attempting to post tweet...');
     console.log('Tweet content:');
     console.log('>>> TWEET TEXT START <<<');
-    console.log(finalTweetText);
+    console.log(postToTweet.text);
     console.log('>>> TWEET TEXT END <<<');
-    console.log(`Tweet text length: ${finalTweetText.length} characters.`);
 
-    // Type assertion for tweetResponse to help TypeScript understand its structure
-    const tweetResponse: TwitterApiResponse = await postTweet(finalTweetText);
+    await postTweetToTwitter(postToTweet.text);
 
-    // --- Twitter API Response Handling ---
-    if (tweetResponse.errors && tweetResponse.errors.length > 0) {
-      const twitterErrorMessages = tweetResponse.errors.map(e => e.message).join(', ');
-      // Log the specific Twitter API error data for debugging
-      if (tweetResponse.errors[0]?.data) {
-        console.error('Twitter API Error Data:', JSON.stringify(tweetResponse.errors[0].data, null, 2));
+    console.log('Tweet posted successfully!');
+
+    // 5. Update the post's status in Supabase (only for regular theme posts)
+    if (!isTrendingPost) {
+      const { error: updateError } = await db
+        .from('posts')
+        .update({ posted_at: new Date().toISOString() })
+        .eq('id', postToTweet.id);
+
+      if (updateError) {
+        console.error('Failed to update post status in Supabase:', updateError);
+        throw new Error(`Failed to update post ID ${postToTweet.id}: ${JSON.stringify(updateError)}`);
       }
-      throw new Error(`Twitter post error: ${twitterErrorMessages}`);
+      console.log(`Post ID ${postToTweet.id} marked as posted in database.`);
+    } else {
+      console.log('Trending post was tweeted. Not typically stored/updated in the main posts table.');
     }
 
-    // Ensure data and id exist before proceeding
-    const tweetId = tweetResponse.data?.id;
+    console.log('--- Scheduled Job Completed Successfully ---');
 
-    if (!tweetId) {
-      throw new Error('No tweet ID returned from Twitter API after successful post (data.id missing).');
+  } catch (error: any) {
+    console.error('\n--- Error in Scheduled Run ---');
+    console.error('Error message:', error.message);
+    if (error.stack) {
+      console.error('Stack trace:', error.stack);
     }
-
-    console.log(`Successfully posted to Twitter. Tweet ID: ${tweetId}`);
-
-    // 6. Log sentiment and mark the specific post as posted in the database
-    // analyzeSentiment now accepts number for postId
-    await analyzeSentiment(db, finalPostId, finalTweetText, tweetId);
-    console.log(`Sentiment analyzed and logged for post ID: ${finalPostId}`);
-
-    await db
-      .from('posts')
-      .update({ posted_at: new Date().toISOString() }) // Mark the specific post record as posted
-      .eq('id', finalPostId); // Use the finalPostId which corresponds to the actual tweet sent
-    console.log(`Post ID ${finalPostId} marked as posted in database.`);
-
-  } catch (err) {
-    console.error('\n--- Error in scheduled run ---');
-    console.error('Error message:', err instanceof Error ? err.message : JSON.stringify(err));
-    if (err instanceof Error && err.stack) {
-      console.error('Stack trace:', err.stack);
+    // Attempt to log more detail from Twitter API errors
+    if (error.data && error.data.detail) {
+        console.error("Twitter API Specific Error Detail:", error.data.detail);
     }
     console.error('--- End Error ---');
+    process.exit(1); // Exit with a non-zero code to indicate failure
   }
 }
 
-// Execute the run function
-run();
+// Helper function to abstract the Twitter API call
+async function postTweetToTwitter(tweetText: string) {
+  try {
+    // Check if tweetText exceeds Twitter's character limit (280 characters for text)
+    // You might want to add a more robust check if you include URLs which consume fewer chars.
+    if (tweetText.length > 280) {
+        console.warn(`Tweet text is too long (${tweetText.length} chars). Truncating if necessary.`);
+        // Or throw an error: throw new Error(`Tweet text exceeds 280 characters: ${tweetText.length}`);
+    }
+
+    const { data } = await twitterClient.tweets.createTweet({ text: tweetText });
+    console.log('Twitter API response:', data);
+    return data;
+  } catch (e: any) {
+    console.error('Error during Twitter API call in postTweetToTwitter:', e);
+    // Re-throw the error so it's caught by the main runScheduledJob catch block
+    throw e;
+  }
+}
+
+// Execute the main function
+runScheduledJob();
 
 
 

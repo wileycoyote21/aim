@@ -4,15 +4,16 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 // Define the Theme interface, as it's now an object passed from cron.ts
 interface Theme {
-  id: number; // Assuming the ID from your Supabase 'themes' table is a number
-  name: string; // The actual theme string (e.g., "fear")
+  id: number; // The ID from your Supabase 'themes' table (which we are now NOT using in posts table for linking)
+  name: string; // The actual theme string (e.g., "fear") - THIS IS WHAT WE'LL USE FOR LINKING
 }
 
 // Define the Post interface for consistency and type safety
 interface Post {
     id: number; // Assuming the ID from your Supabase 'posts' table is a number
     text: string;
-    theme_id: number;
+    // We are changing this from theme_id to theme (string) based on the error
+    theme: string; // This column likely stores the theme name directly
     posted_at: string | null; // ISO string if posted, null otherwise
     created_at: string; // ISO string for creation date
     // Add any other properties your 'posts' table rows might have
@@ -23,16 +24,17 @@ interface Post {
  * This function now expects a Theme object as its 'theme' argument.
  */
 export async function generatePostsForTheme(db: SupabaseClient, theme: Theme): Promise<Post[]> {
-  // 1. Check if posts already exist for this theme (using theme.id)
-  console.log(`Checking for existing posts for theme ID: ${theme.id} ("${theme.name}")`);
+  // 1. Check if posts already exist for this theme (using theme.name, as 'posts.theme_id' doesn't exist)
+  console.log(`Checking for existing posts for theme name: "${theme.name}"`);
   const { data: existingPosts, error: fetchError } = await db
     .from("posts")
     .select("*")
-    .eq("theme_id", theme.id) // Filter by the theme's ID
+    .eq("theme", theme.name) // <--- CHANGED: Use theme.name (the string) to filter by the 'theme' column
     .order('created_at', { ascending: true }); // Order for consistent selection later
 
   if (fetchError) {
     console.error("Failed to fetch existing posts:", fetchError);
+    // Include the original error message in the thrown error for better debugging
     throw new Error(`Failed to fetch posts for theme ${theme.name}: ${JSON.stringify(fetchError)}`);
   }
 
@@ -43,9 +45,6 @@ export async function generatePostsForTheme(db: SupabaseClient, theme: Theme): P
 
   // 2. If no posts exist, generate new ones based on the theme.name
   console.log(`No posts found for theme "${theme.name}". Generating new ones...`);
-  // This is where your actual post generation logic comes into play.
-  // Replace this placeholder with your actual content generation.
-  // For demonstration, I'm creating a few simple messages related to the theme.
   const newPostsContent: string[] = [
     `Today's muse: "${theme.name}". What does it inspire in you? #AIArt #DailyMuse`,
     `Reflecting on "${theme.name}" through the lens of AI. #AIThoughts`,
@@ -55,7 +54,7 @@ export async function generatePostsForTheme(db: SupabaseClient, theme: Theme): P
   ];
 
   const postsToInsert = newPostsContent.map(text => ({
-    theme_id: theme.id, // Link the new posts to the theme's ID
+    theme: theme.name, // <--- CHANGED: Use theme.name (the string) for the 'theme' column in posts table
     text: text,
     created_at: new Date().toISOString(), // Use current timestamp for creation
     posted_at: null, // Initially not posted
@@ -75,5 +74,4 @@ export async function generatePostsForTheme(db: SupabaseClient, theme: Theme): P
   console.log(`Generated and inserted ${insertedPosts?.length || 0} new posts for theme "${theme.name}".`);
   return insertedPosts || [];
 }
-
 

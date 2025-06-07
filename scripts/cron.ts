@@ -3,12 +3,41 @@
 import 'dotenv/config'; // ⬅️ This ensures environment variables load locally and on GitHub Actions
 
 import { supabase } from '../src/db/client';
-import { generateThemeForToday } from '../src/themes/generator';
+import { generateThemeForToday } from '../src/themes/generator'; // Assuming this returns { id: number, name: string }
 import { generatePostsForTheme } from '../src/posts/generate';
-import { analyzeSentiment } from '../src/sentiment/analyze';
+import { analyzeSentiment } from '../src/sentiment/analyze'; // Assuming analyzeSentiment accepts number for postId
 import { postTweet } from '../src/twitter/post';
 import { getTodayTimestamp } from '../src/utils/timestamp';
-import { generateTrendingPost } from '../src/posts/trending'; // Assuming this function is implemented and returns string
+import { generateTrendingPost } from '../src/posts/trending';
+
+// Define a type for the theme object
+interface Theme {
+  id: number; // Assuming ID is a number, adjust if it's a string (e.g., UUID)
+  name: string;
+  // Add other properties if your theme object has them
+}
+
+// Define a type for a single post object
+interface Post {
+    id: number; // Assuming ID is a number
+    text: string;
+    posted_at: string | null; // Null if not yet posted
+    // Add other properties that a post might have
+}
+
+// Define a more specific type for Twitter API responses
+interface TwitterApiResponse {
+    data?: {
+        id: string; // Tweet ID
+        text: string;
+    };
+    errors?: Array<{
+        message: string;
+        code?: number;
+        data?: any; // For the detailed error object from Twitter
+    }>;
+}
+
 
 const db = supabase;
 
@@ -17,12 +46,12 @@ async function run() {
     const today = getTodayTimestamp();
 
     // 1. Get or generate today's theme
-    const theme = await generateThemeForToday(db, today);
+    // Ensure generateThemeForToday returns an object conforming to the Theme interface
+    const theme: Theme = await generateThemeForToday(db, today);
     console.log(`Using theme: "${theme.name}" (ID: ${theme.id})`);
 
     // 2. Generate posts for the theme if they don't already exist in DB
-    // This function should ideally also ensure the generated posts are unique against past tweets
-    const posts = await generatePostsForTheme(db, theme);
+    const posts: Post[] = await generatePostsForTheme(db, theme);
     console.log(`Found/Generated ${posts.length} posts for theme "${theme.name}".`);
 
     // 3. Select the next unposted message (from the theme-specific posts)
@@ -52,7 +81,7 @@ async function run() {
       const { data: existingTrendingPosts, error: fetchExistingError } = await db
         .from('posts')
         .select('id, text')
-        .eq('text', trendingText); // Simple exact match for now; consider normalization
+        .eq('text', trendingText); // Simple exact match for now; consider normalization if needed
 
       if (fetchExistingError) {
         throw new Error(`Failed to check for existing trending posts in DB: ${fetchExistingError.message}`);
@@ -60,20 +89,17 @@ async function run() {
 
       if (existingTrendingPosts && existingTrendingPosts.length > 0) {
         console.warn(`WARNING: Generated trending post "${trendingText}" already exists in the database. Skipping tweet to avoid Twitter API duplicate error.`);
-        // If a duplicate is found, we log and exit for this run.
-        // You could add logic here to try generating another trending post,
-        // or fallback to a regular theme post if nextThemePost is available.
-        return;
+        return; // Exit if duplicate found
       }
 
       // If unique, save the trending post to the database first
       const { data: newPostData, error: insertError } = await db
         .from('posts')
         .insert({
-          theme_id: theme.id, // Associate with the current theme or a dedicated trending theme ID
+          theme_id: theme.id, // Associate with the current theme ID
           text: trendingText,
           created_at: new Date().toISOString(), // Timestamp for creation
-          // You might want to add a 'type' column (e.g., 'theme', 'trending') here
+          // Consider adding a 'type' column (e.g., 'theme', 'trending') here for better classification
         })
         .select('id') // Select the ID of the newly inserted row
         .single(); // Expecting one row to be returned
@@ -105,7 +131,8 @@ async function run() {
     console.log('>>> TWEET TEXT END <<<');
     console.log(`Tweet text length: ${finalTweetText.length} characters.`);
 
-    const tweetResponse = await postTweet(finalTweetText);
+    // Type assertion for tweetResponse to help TypeScript understand its structure
+    const tweetResponse: TwitterApiResponse = await postTweet(finalTweetText);
 
     // --- Twitter API Response Handling ---
     if (tweetResponse.errors && tweetResponse.errors.length > 0) {
@@ -117,6 +144,7 @@ async function run() {
       throw new Error(`Twitter post error: ${twitterErrorMessages}`);
     }
 
+    // Ensure data and id exist before proceeding
     const tweetId = tweetResponse.data?.id;
 
     if (!tweetId) {
@@ -126,6 +154,7 @@ async function run() {
     console.log(`Successfully posted to Twitter. Tweet ID: ${tweetId}`);
 
     // 6. Log sentiment and mark the specific post as posted in the database
+    // Ensure analyzeSentiment's postId parameter accepts number
     await analyzeSentiment(db, finalPostId, finalTweetText, tweetId);
     console.log(`Sentiment analyzed and logged for post ID: ${finalPostId}`);
 

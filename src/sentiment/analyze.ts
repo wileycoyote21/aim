@@ -11,8 +11,6 @@ interface SentimentResult {
 }
 
 async function analyzeTextSentiment(text: string): Promise<SentimentResult> {
-  // Basic example using OpenAI text classification for sentiment
-  // Adjust prompt & model to your preference and usage limits
   const prompt = `Classify the sentiment of this text as positive, neutral, or negative.\nText: """${text}"""`;
 
   const response = await openai.chat.completions.create({
@@ -41,9 +39,10 @@ async function analyzeTextSentiment(text: string): Promise<SentimentResult> {
   return { score, label };
 }
 
+// Changed postId type from string to number
 export async function analyzeSentiment(
   db: SupabaseClient,
-  postId: string,
+  postId: number, // <--- CHANGED FROM string TO number
   text: string,
   tweetId: string
 ) {

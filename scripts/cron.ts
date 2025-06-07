@@ -1,9 +1,9 @@
 // scripts/cron.ts
 
 import { db } from '../src/db/client'; // Your Supabase client setup
-import TwitterClient from 'twitter-api-sdk'; // FIX: Changed to default import
+import TwitterClient from 'twitter-api-sdk'; // Correct default import for TwitterClient
 import { generatePostsForTheme } from '../src/posts/generate';
-import { generateTrendingPost } from '../src/posts/trending';
+import { generateTrendingPost } from '../src/posts/trending'; // IMPORTANT: This file needs to exist and export this function!
 
 // Ensure these interfaces match your Supabase table structures consistently across your project
 interface Theme {
@@ -22,10 +22,12 @@ interface Post {
 
 // Initialize Twitter Client using environment variables
 const twitterClient = new TwitterClient({
-  consumer_key: process.env.TWITTER_API_KEY || '',
-  consumer_secret: process.env.TWITTER_API_SECRET || '',
-  access_token: process.env.TWITTER_ACCESS_TOKEN || '',
-  access_token_secret: process.env.TWITTER_ACCESS_TOKEN_SECRET || '',
+  oauth: { // <--- FIX: OAuth 1.0a credentials must be nested under 'oauth'
+    consumer_key: process.env.TWITTER_API_KEY || '',
+    consumer_secret: process.env.TWITTER_API_SECRET || '',
+    access_token: process.env.TWITTER_ACCESS_TOKEN || '',
+    access_token_secret: process.env.TWITTER_ACCESS_TOKEN_SECRET || '',
+  },
 });
 
 // Main function to run the scheduled job
@@ -161,7 +163,6 @@ async function postTweetToTwitter(tweetText: string) {
 
 // Execute the main function
 runScheduledJob();
-
 
 
 

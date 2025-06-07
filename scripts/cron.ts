@@ -1,19 +1,19 @@
 // scripts/cron.ts
 
 import { db } from '../src/db/client'; // Your Supabase client setup
-import { TwitterClient } from 'twitter-api-sdk'; // Assuming this is your Twitter SDK
+import TwitterClient from 'twitter-api-sdk'; // FIX: Changed to default import
 import { generatePostsForTheme } from '../src/posts/generate';
-import { generateTrendingPost } from '../src/posts/trending'; // IMPORTANT: This file needs to exist and export this function!
+import { generateTrendingPost } from '../src/posts/trending';
 
 // Ensure these interfaces match your Supabase table structures consistently across your project
 interface Theme {
-  id: number; // Changed from string to number to match generate.ts and common Supabase practice
+  id: number;
   name: string;
-  is_active: boolean; // Assuming this property exists in your themes table
+  is_active: boolean;
 }
 
 interface Post {
-    id: number; // Changed from string to number to match generate.ts and common Supabase practice
+    id: number;
     text: string;
     theme: string;
     posted_at: string | null;
@@ -71,11 +71,10 @@ async function runScheduledJob() {
     // Logic for a special "trending post" every 5th tweet
     if ((totalPosted || 0) % 5 === 0 && (totalPosted || 0) !== 0) {
       console.log('It\'s time for a special trending post!');
-      const trendingText = await generateTrendingPost(db); // Pass db as argument here
+      const trendingText = await generateTrendingPost(db);
       if (trendingText) {
-          // Trending posts aren't typically from the 'posts' table, so construct a temporary Post-like object
           postToTweet = {
-              id: Date.now(), // Use a temporary number ID for consistency
+              id: Date.now(),
               text: trendingText,
               theme: 'trending',
               created_at: new Date().toISOString(),
@@ -85,7 +84,6 @@ async function runScheduledJob() {
       }
     }
 
-    // If not a trending post day, or trending post generation failed, get next theme post
     if (!postToTweet) {
       const nextThemePost = posts.find(p => !p.posted_at);
 
@@ -149,9 +147,7 @@ async function runScheduledJob() {
 async function postTweetToTwitter(tweetText: string) {
   try {
     if (tweetText.length > 280) {
-        console.warn(`Tweet text is too long (${tweetText.length} chars). Truncating if necessary.`);
-        // Consider actual truncation or better error handling here if this happens often
-        // tweetText = tweetText.substring(0, 280); // Example truncation
+        console.warn(`Tweet text is too long (${tweetText.length} chars). It might be truncated by Twitter.`);
     }
 
     const { data } = await twitterClient.tweets.createTweet({ text: tweetText });

@@ -6,17 +6,16 @@ import 'dotenv/config';
 
 // Get Supabase credentials from environment variables
 const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_ANON_KEY; // <--- CHANGED THIS LINE TO SUPABASE_ANON_KEY
+const supabaseKey = process.env.SUPABASE_ANON_KEY; // <-- FIX: Ensure this matches your secret name
 
 // Basic check to ensure credentials exist
 if (!supabaseUrl || !supabaseKey) {
-  throw new Error('Missing Supabase credentials in environment variables (SUPABASE_URL, SUPABASE_ANON_KEY)'); // Updated error message for clarity
+  throw new Error('Missing Supabase credentials in environment variables (SUPABASE_URL, SUPABASE_ANON_KEY)'); // FIX: Updated error message
 }
 
 // Initialize and export the Supabase client instance
 export const db = createClient(supabaseUrl as string, supabaseKey as string);
 
 console.log("Supabase Client initialized."); // Optional: for debugging
-
 
 

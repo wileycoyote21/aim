@@ -1,38 +1,34 @@
-import { openaiClient } from "../utils/openaiClient"; // you'll want to create a reusable OpenAI client helper
-import { getTrendingTopics } from "../utils/trends"; // placeholder for your trends fetching logic
+// src/posts/trending.ts
+import { SupabaseClient } from '@supabase/supabase-js';
+import { OpenAI } from "openai"; // Assuming you'll use OpenAI for trending posts too
 
-/**
- * Fetch trending topics and generate a trending-aware introspective post
- */
-export async function generateTrendingPost(): Promise<string> {
-  try {
-    // Fetch trending topics (stub for now)
-    const trendingTopics = await getTrendingTopics();
-    if (trendingTopics.length === 0) {
-      return "sometimes the loudest noise is silence itself.";
+const openai = new OpenAI();
+
+export async function generateTrendingPost(db: SupabaseClient): Promise<string> {
+    // This is where you'd put logic to generate a post about a trending topic.
+    // It receives the 'db' client, though it might not need it for all trending logic.
+    const prompt = `Write a single, short (1-2 sentences), lowercase post about what's currently trending. Make it slightly observational and a little witty, without using hashtags.`;
+    const systemMessage = `You are an AI designed to make concise, clever observations about trends. All output must be lowercase and hashtag-free.`;
+
+    try {
+        const response = await openai.chat.completions.create({
+            model: "gpt-4o-mini",
+            messages: [
+                { role: "system", content: systemMessage },
+                { role: "user", content: prompt },
+            ],
+            temperature: 0.9,
+            max_tokens: 50,
+        });
+
+        const generatedText = response.choices[0].message?.content?.trim();
+        if (generatedText) {
+            return generatedText.toLowerCase().replace(/#\w+/g, '').trim();
+        }
+    } catch (error) {
+        console.error("Error generating trending post with OpenAI:", error);
     }
 
-    const prompt = `
-      Using the trending topics below, write a short, introspective, journal-like social media post in lowercase, 1-2 sentences long.
-      The tone should be emotionally reflective, subtle, and self-aware, as if an AI muse is quietly observing the world.
-
-      Trending topics:
-      ${trendingTopics.join(", ")}
-
-      Post:
-    `;
-
-    const completion = await openaiClient.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.7,
-      max_tokens: 60,
-    });
-
-    const post = completion.choices[0]?.message?.content?.trim() ?? "";
-    return post || "even in trends, some stories are quietly unfolding.";
-  } catch (error) {
-    console.error("Error generating trending post:", error);
-    return "the world keeps spinning, whether we notice the trends or not.";
-  }
+    // Fallback if OpenAI call fails
+    return "sometimes, the fleeting nature of human attention is a trend in itself. #observation";
 }

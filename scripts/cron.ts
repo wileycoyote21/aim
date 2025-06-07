@@ -5,15 +5,15 @@ import { TwitterClient } from 'twitter-api-sdk'; // Assuming this is your Twitte
 import { generatePostsForTheme } from '../src/posts/generate';
 import { generateTrendingPost } from '../src/posts/trending'; // IMPORTANT: This file needs to exist and export this function!
 
-// Ensure these interfaces match your Supabase table structures
+// Ensure these interfaces match your Supabase table structures consistently across your project
 interface Theme {
-  id: string; // Or number, depending on your actual Supabase 'themes' table ID type
+  id: number; // Changed from string to number to match generate.ts and common Supabase practice
   name: string;
-  is_active: boolean;
+  is_active: boolean; // Assuming this property exists in your themes table
 }
 
 interface Post {
-    id: string; // Or number
+    id: number; // Changed from string to number to match generate.ts and common Supabase practice
     text: string;
     theme: string;
     posted_at: string | null;
@@ -21,7 +21,6 @@ interface Post {
 }
 
 // Initialize Twitter Client using environment variables
-// Ensure these environment variables are set in your GitHub Actions secrets
 const twitterClient = new TwitterClient({
   consumer_key: process.env.TWITTER_API_KEY || '',
   consumer_secret: process.env.TWITTER_API_SECRET || '',
@@ -37,7 +36,6 @@ async function runScheduledJob() {
     console.log('Twitter Client initialized.');
 
     // 1. Get the current active theme
-    // Assumes you have a 'themes' table and one active theme at a time
     const { data: themes, error: themesError } = await db
       .from('themes')
       .select('*')
@@ -52,15 +50,13 @@ async function runScheduledJob() {
     console.log(`Using theme: "${currentTheme.name}" (ID: ${currentTheme.id})`);
 
     // 2. Generate/fetch posts for the current theme
-    // This function will generate new posts if none exist for the theme,
-    // otherwise, it will return the existing unposted ones.
     const posts = await generatePostsForTheme(db, currentTheme);
 
     // 3. Determine if it's time for a "trending" post or a regular theme post
     const { count: totalPosted, error: countError } = await db
       .from('posts')
       .select('*', { count: 'exact' })
-      .not('posted_at', 'is', null); // Count all posts that have been marked as posted
+      .not('posted_at', 'is', null);
 
     if (countError) {
       console.error('Error counting total posted tweets:', countError);
@@ -70,23 +66,20 @@ async function runScheduledJob() {
     console.log(`Total tweets posted across all themes: ${totalPosted}`);
 
     let postToTweet: Post | null = null;
-    let isTrendingPost = false; // Flag to indicate if the post is a trending one (not stored in 'posts' table)
+    let isTrendingPost = false;
 
     // Logic for a special "trending post" every 5th tweet
-    // (totalPosted || 0) ensures it treats null/undefined as 0
     if ((totalPosted || 0) % 5 === 0 && (totalPosted || 0) !== 0) {
       console.log('It\'s time for a special trending post!');
-      // Call your function to generate a trending post
-      // NOTE: `generateTrendingPost` should return a temporary post object,
-      // as these are often not stored in the main 'posts' table.
-      const trendingContent = await generateTrendingPost(db); // Pass the database client if needed for trending logic
-      if (trendingContent) {
+      const trendingText = await generateTrendingPost(db); // Pass db as argument here
+      if (trendingText) {
+          // Trending posts aren't typically from the 'posts' table, so construct a temporary Post-like object
           postToTweet = {
-              id: 'trending-' + Date.now(), // Give it a temporary ID
-              text: trendingContent,
-              theme: 'trending', // Assign a conceptual theme
+              id: Date.now(), // Use a temporary number ID for consistency
+              text: trendingText,
+              theme: 'trending',
               created_at: new Date().toISOString(),
-              posted_at: null // Not "posted" in the database sense
+              posted_at: null
           };
           isTrendingPost = true;
       }
@@ -144,23 +137,21 @@ async function runScheduledJob() {
     if (error.stack) {
       console.error('Stack trace:', error.stack);
     }
-    // Attempt to log more detail from Twitter API errors
     if (error.data && error.data.detail) {
         console.error("Twitter API Specific Error Detail:", error.data.detail);
     }
     console.error('--- End Error ---');
-    process.exit(1); // Exit with a non-zero code to indicate failure
+    process.exit(1);
   }
 }
 
 // Helper function to abstract the Twitter API call
 async function postTweetToTwitter(tweetText: string) {
   try {
-    // Check if tweetText exceeds Twitter's character limit (280 characters for text)
-    // You might want to add a more robust check if you include URLs which consume fewer chars.
     if (tweetText.length > 280) {
         console.warn(`Tweet text is too long (${tweetText.length} chars). Truncating if necessary.`);
-        // Or throw an error: throw new Error(`Tweet text exceeds 280 characters: ${tweetText.length}`);
+        // Consider actual truncation or better error handling here if this happens often
+        // tweetText = tweetText.substring(0, 280); // Example truncation
     }
 
     const { data } = await twitterClient.tweets.createTweet({ text: tweetText });
@@ -168,7 +159,6 @@ async function postTweetToTwitter(tweetText: string) {
     return data;
   } catch (e: any) {
     console.error('Error during Twitter API call in postTweetToTwitter:', e);
-    // Re-throw the error so it's caught by the main runScheduledJob catch block
     throw e;
   }
 }

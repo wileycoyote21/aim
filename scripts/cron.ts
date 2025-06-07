@@ -3,38 +3,37 @@
 import 'dotenv/config'; // ⬅️ This ensures environment variables load locally and on GitHub Actions
 
 import { supabase } from '../src/db/client';
-import { generateThemeForToday } from '../src/themes/generator'; // Assuming this returns { id: number, name: string }
+import { generateThemeForToday } from '../src/themes/generator';
 import { generatePostsForTheme } from '../src/posts/generate';
-import { analyzeSentiment } from '../src/sentiment/analyze'; // Assuming analyzeSentiment accepts number for postId
+import { analyzeSentiment } from '../src/sentiment/analyze';
 import { postTweet } from '../src/twitter/post';
 import { getTodayTimestamp } from '../src/utils/timestamp';
-import { generateTrendingPost } from '../src/posts/trending';
+import { generateTrendingPost } from '../src/posts/trending'; // Assuming this function exists and returns string
 
-// Define a type for the theme object
+// Define a type for the theme object expected from generateThemeForToday
 interface Theme {
-  id: number; // Assuming ID is a number, adjust if it's a string (e.g., UUID)
-  name: string;
-  // Add other properties if your theme object has them
+  id: number; // Assuming ID is a number (Supabase primary key integer)
+  name: string; // The actual theme string like "fear"
 }
 
 // Define a type for a single post object
 interface Post {
     id: number; // Assuming ID is a number
     text: string;
-    posted_at: string | null; // Null if not yet posted
-    // Add other properties that a post might have
+    posted_at: string | null; // Null if not yet posted, ISO string if posted
+    // Add other properties that a post might have if needed for logic here
 }
 
 // Define a more specific type for Twitter API responses
 interface TwitterApiResponse {
     data?: {
-        id: string; // Tweet ID
+        id: string; // Tweet ID from Twitter
         text: string;
     };
     errors?: Array<{
         message: string;
         code?: number;
-        data?: any; // For the detailed error object from Twitter
+        data?: any; // For the detailed error object from Twitter API
     }>;
 }
 
@@ -46,12 +45,12 @@ async function run() {
     const today = getTodayTimestamp();
 
     // 1. Get or generate today's theme
-    // Ensure generateThemeForToday returns an object conforming to the Theme interface
+    // generateThemeForToday now returns { id: number, name: string }
     const theme: Theme = await generateThemeForToday(db, today);
     console.log(`Using theme: "${theme.name}" (ID: ${theme.id})`);
 
     // 2. Generate posts for the theme if they don't already exist in DB
-    const posts: Post[] = await generatePostsForTheme(db, theme);
+    const posts: Post[] = await generatePostsForTheme(db, theme); // Ensure generatePostsForTheme expects Theme object
     console.log(`Found/Generated ${posts.length} posts for theme "${theme.name}".`);
 
     // 3. Select the next unposted message (from the theme-specific posts)
@@ -154,7 +153,7 @@ async function run() {
     console.log(`Successfully posted to Twitter. Tweet ID: ${tweetId}`);
 
     // 6. Log sentiment and mark the specific post as posted in the database
-    // Ensure analyzeSentiment's postId parameter accepts number
+    // analyzeSentiment now accepts number for postId
     await analyzeSentiment(db, finalPostId, finalTweetText, tweetId);
     console.log(`Sentiment analyzed and logged for post ID: ${finalPostId}`);
 

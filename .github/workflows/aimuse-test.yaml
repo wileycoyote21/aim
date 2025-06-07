@@ -1,24 +1,17 @@
-name: Post AI Muse Tweets
+name: Manual AI Muse Tweet Push
 
 on:
-  # This section defines the scheduled runs using cron syntax (UTC times)
-  schedule:
-    # Runs at 8:00 AM EST (13:00 UTC)
-    - cron: '0 13 * * *'
-    # Runs at 8:00 PM EST (01:00 UTC next day)
-    - cron: '0 1 * * *'
-    # Runs at 11:00 PM EST (04:00 UTC next day)
-    - cron: '0 4 * * *'
-
-  # This allows you to manually trigger the workflow from the GitHub Actions tab
+  # This section allows you to manually trigger the workflow from the GitHub Actions tab.
+  # You'll see a "Run workflow" button.
   workflow_dispatch:
 
 jobs:
   post-tweets:
     runs-on: ubuntu-latest
     env:
+      # These are the environment variables your script needs to run.
+      # They are securely fetched from your GitHub Repository Secrets.
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      # Use SUPABASE_ANON_KEY for the anon public key
       SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
@@ -27,21 +20,23 @@ jobs:
       TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
 
     steps:
-      - name: Checkout repo
-        # Update to v4 for the latest version
+      - name: Checkout repository
+        # This step checks out your code from the repository.
         uses: actions/checkout@v4
 
       - name: Set up Node.js
-        # Update to v4 for the latest version
+        # Configures the Node.js environment needed for your script.
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 20 # Ensures compatibility with your project
 
       - name: Install dependencies
+        # Installs all packages listed in your package.json (e.g., Supabase client, twitter-api-v2).
         run: npm ci
 
-      - name: Run daily post script
-        # Removed the echo since it's already handled by npm run post output
+      - name: Run manual tweet post script
+        # Executes your TypeScript cron script using ts-node.
+        # This is the command that will attempt to post a tweet.
         run: npm run post
 
 

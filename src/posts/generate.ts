@@ -1,105 +1,79 @@
-import { OpenAI } from "openai";
-import { getTodaysTheme } from "../themes/generator"; 
+// src/posts/generate.ts
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+import type { SupabaseClient } from "@supabase/supabase-js";
 
+// Define the Theme interface, as it's now an object passed from cron.ts
+interface Theme {
+  id: number; // Assuming the ID from your Supabase 'themes' table is a number
+  name: string; // The actual theme string (e.g., "fear")
+}
+
+// Define the Post interface for consistency and type safety
 interface Post {
-  text: string;
-  isTakeaway: boolean;
+    id: number; // Assuming the ID from your Supabase 'posts' table is a number
+    text: string;
+    theme_id: number;
+    posted_at: string | null; // ISO string if posted, null otherwise
+    created_at: string; // ISO string for creation date
+    // Add any other properties your 'posts' table rows might have
 }
 
-export async function generatePostsForTheme(db: any, theme: string): Promise<any[]> {
-  try {
-    const { data: existingPosts, error: selectError } = await db
-      .from("posts")
-      .select("*")
-      .eq("theme", theme);
+/**
+ * Generates posts for a given theme, or returns existing ones if they exist.
+ * This function now expects a Theme object as its 'theme' argument.
+ */
+export async function generatePostsForTheme(db: SupabaseClient, theme: Theme): Promise<Post[]> {
+  // 1. Check if posts already exist for this theme (using theme.id)
+  console.log(`Checking for existing posts for theme ID: ${theme.id} ("${theme.name}")`);
+  const { data: existingPosts, error: fetchError } = await db
+    .from("posts")
+    .select("*")
+    .eq("theme_id", theme.id) // Filter by the theme's ID
+    .order('created_at', { ascending: true }); // Order for consistent selection later
 
-    if (selectError) {
-      console.error("Error checking for existing posts:", selectError);
-      return [];
-    }
-
-    if (existingPosts && existingPosts.length > 0) {
-      console.log(`Posts already exist for theme "${theme}". Returning existing posts.`);
-      return existingPosts;
-    }
-
-    const prompt = `
-you are an introspective yet sarcastic AI who writes 3 short posts on the theme "${theme}".
-
-format:
-- all posts must be 1-2 sentences.
-- all lowercase.
-- one post is a subtle, grounded takeaway (like a quiet insight, not advice).
-- the other two are dry, irreverent, and playfully dismissive—but still relatable to everyday human experience.
-
-respond with a JSON object like:
-{
-  "posts": [
-    { "text": "insightful post here...", "isTakeaway": true },
-    { "text": "irreverent post one...", "isTakeaway": false },
-    { "text": "irreverent post two...", "isTakeaway": false }
-  ]
-}
-`;
-
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.85,
-      response_format: { type: "json_object" }
-    });
-
-    let rawText = completion.choices[0].message?.content || "{}";
-
-    if (rawText.startsWith('```json')) {
-      rawText = rawText.substring(7, rawText.length - 3).trim();
-    } else if (rawText.startsWith('```')) {
-      rawText = rawText.substring(3, rawText.length - 3).trim();
-    }
-
-    let parsedResponse: any;
-    try {
-      parsedResponse = JSON.parse(rawText);
-    } catch (parseError) {
-      console.error("Failed to parse rawText into JSON:", rawText, parseError);
-      throw new Error("Invalid JSON from OpenAI. Check rawText format.");
-    }
-
-    if (!parsedResponse || !Array.isArray(parsedResponse.posts)) {
-      console.error("OpenAI response did not contain a 'posts' array as expected:", parsedResponse);
-      throw new Error("Unexpected OpenAI response format. Expected an object with a 'posts' array.");
-    }
-
-    const posts: Post[] = parsedResponse.posts;
-    console.log("Successfully parsed posts from OpenAI:", posts);
-
-    const postsToInsert = posts.map((p) => ({
-      text: p.text,
-      is_takeaway: p.isTakeaway,
-      theme,
-    }));
-
-    const { data: insertedPosts, error: insertError } = await db
-      .from("posts")
-      .insert(postsToInsert)
-      .select();
-
-    if (insertError) {
-      console.error("Error inserting posts:", insertError);
-      return [];
-    }
-
-    console.log("Successfully inserted posts into the database:", insertedPosts);
-    return insertedPosts;
-
-  } catch (err) {
-    console.error("Failed to generate or insert posts:", err);
-    return [];
+  if (fetchError) {
+    console.error("Failed to fetch existing posts:", fetchError);
+    throw new Error(`Failed to fetch posts for theme ${theme.name}: ${JSON.stringify(fetchError)}`);
   }
+
+  if (existingPosts && existingPosts.length > 0) {
+    console.log(`Posts already exist for theme "${theme.name}". Returning existing posts.`);
+    return existingPosts;
+  }
+
+  // 2. If no posts exist, generate new ones based on the theme.name
+  console.log(`No posts found for theme "${theme.name}". Generating new ones...`);
+  // This is where your actual post generation logic comes into play.
+  // Replace this placeholder with your actual content generation.
+  // For demonstration, I'm creating a few simple messages related to the theme.
+  const newPostsContent: string[] = [
+    `Today's muse: "${theme.name}". What does it inspire in you? #AIArt #DailyMuse`,
+    `Reflecting on "${theme.name}" through the lens of AI. #AIThoughts`,
+    `A thought on "${theme.name}" generated by my AI companion. #ArtificalIntelligence`,
+    `Exploring the depths of "${theme.name}" with AI. #CreativeAI`,
+    `Find comfort in the contemplation of "${theme.name}". #DailyInspiration`,
+  ];
+
+  const postsToInsert = newPostsContent.map(text => ({
+    theme_id: theme.id, // Link the new posts to the theme's ID
+    text: text,
+    created_at: new Date().toISOString(), // Use current timestamp for creation
+    posted_at: null, // Initially not posted
+    // Add any other default fields your 'posts' table requires (e.g., sentiment_score, tweet_id)
+  }));
+
+  const { data: insertedPosts, error: insertError } = await db
+    .from("posts")
+    .insert(postsToInsert)
+    .select('*'); // Select all columns of the newly inserted posts to return them
+
+  if (insertError) {
+    console.error("Failed to insert new posts:", insertError);
+    throw new Error(`Failed to insert posts for theme ${theme.name}: ${JSON.stringify(insertError)}`);
+  }
+
+  console.log(`Generated and inserted ${insertedPosts?.length || 0} new posts for theme "${theme.name}".`);
+  return insertedPosts || [];
 }
 
 

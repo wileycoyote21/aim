@@ -4,16 +4,16 @@ import { db } from '../src/db/client'; // Your Supabase client setup
 import { TwitterApi } from 'twitter-api-v2'; // NEW IMPORT: twitter-api-v2
 import { generatePostsForTheme } from '../src/posts/generate';
 import { generateTrendingPost } from '../src/posts/trending'; // This file needs to exist and export this function!
+import { generateThemeForToday } from '../src/themes/generator';
 
 // Ensure these interfaces match your Supabase table structures consistently across your project
 interface Theme {
   id: number;
   name: string;
-  is_active: boolean;
 }
 
 interface Post {
-    id: number;
+    id: string;
     text: string;
     theme: string;
     posted_at: string | null;
@@ -36,18 +36,9 @@ async function runScheduledJob() {
     console.log('Supabase Client initialized.');
     console.log('Twitter Client initialized.');
 
-    // 1. Get the current active theme
-    const { data: themes, error: themesError } = await db
-      .from('themes')
-      .select('*')
-      .eq('is_active', true)
-      .limit(1);
-
-    if (themesError || !themes || themes.length === 0) {
-      throw new Error(`Failed to fetch active theme or no active theme found: ${JSON.stringify(themesError)}`);
-    }
-
-    const currentTheme: Theme = themes[0];
+    // 1. Get or generate today's theme
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+    const currentTheme = await generateThemeForToday(db, today);
     console.log(`Using theme: "${currentTheme.name}" (ID: ${currentTheme.id})`);
 
     // 2. Generate/fetch posts for the current theme
@@ -75,7 +66,7 @@ async function runScheduledJob() {
       const trendingText = await generateTrendingPost(db);
       if (trendingText) {
           postToTweet = {
-              id: Date.now(),
+              id: Date.now().toString(),
               text: trendingText,
               theme: 'trending',
               created_at: new Date().toISOString(),
@@ -154,10 +145,18 @@ async function postTweetToTwitter(tweetText: string) {
         console.warn(`Tweet text is too long (${tweetText.length} chars). It might be truncated by Twitter.`);
     }
 
-    // Use the v1.1 client for posting tweets
-    const data = await twitterClient.v1.tweet(tweetText); // <--- FIX: Removed destructuring '{ data }'
-    console.log('Twitter API response:', data); // Now 'data' is the TweetV1 object
-    return data;
+    // Try v2 API first (free tier supports basic v2 endpoints)
+    try {
+      const { data } = await twitterClient.v2.tweet(tweetText);
+      console.log('Twitter API v2 response:', data);
+      return data;
+    } catch (v2Error: any) {
+      console.log('V2 API failed, trying v1.1:', v2Error.message);
+      // If v2 fails, try v1.1 as fallback
+      const data = await twitterClient.v1.tweet(tweetText);
+      console.log('Twitter API v1.1 response:', data);
+      return data;
+    }
   } catch (e: any) {
     console.error('Error during Twitter API call in postTweetToTwitter:', e);
     throw e; // Re-throw for main catch block

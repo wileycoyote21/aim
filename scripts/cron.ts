@@ -3,12 +3,12 @@
 import { db } from '../src/db/client'; // Your Supabase client setup
 import { TwitterApi } from 'twitter-api-v2';
 import { generatePostsForTheme } from '../src/posts/generate';
-import { generateThemeForToday } from '../src/themes/generator';
 
 // Interfaces for Supabase tables
 interface Theme {
   id: number;
   name: string;
+  used?: boolean;
 }
 
 interface Post {
@@ -33,26 +33,33 @@ async function runScheduledJob() {
     console.log('Supabase Client initialized.');
     console.log('Twitter Client initialized.');
 
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-    const currentTheme = await generateThemeForToday(db, today);
+    const currentTheme = await getNextThemeToPost(db);
+    if (!currentTheme) {
+      console.warn('No valid themes with unposted posts found. Exiting...');
+      return;
+    }
+
     console.log(`Using theme: "${currentTheme.name}" (ID: ${currentTheme.id})`);
 
     // Fetch posts for current theme
     let posts = await generatePostsForTheme(db, currentTheme);
 
-    // If no posts exist for this theme yet, generate 3 posts immediately
     if (!posts || posts.length === 0) {
       console.log(`No posts found for theme "${currentTheme.name}". Generating 3 new posts...`);
       posts = await generatePostsForTheme(db, currentTheme);
       console.log(`Generated ${posts.length} posts for theme "${currentTheme.name}".`);
     }
 
-    // Pick the next unposted theme post
+    // Pick the next unposted post
     const nextThemePost = posts.find(p => !p.posted_at);
     if (!nextThemePost) {
-      console.warn(`All posts for theme "${currentTheme.name}" have been posted. No tweet this run.`);
-      return; // Exit cleanly, no error
+      console.warn(`All posts for theme "${currentTheme.name}" have been posted.`);
+
+      // Optionally mark the theme as used
+      await db.from("themes").update({ used: true }).eq("id", currentTheme.id);
+      return;
     }
+
     const postToTweet = nextThemePost;
     console.log(`Using next regular theme post (ID: ${postToTweet.id}).`);
 
@@ -116,8 +123,44 @@ async function postTweetToTwitter(tweetText: string) {
   }
 }
 
+async function getNextThemeToPost(db: typeof import('@supabase/supabase-js').SupabaseClient): Promise<Theme | null> {
+  const { data: themes, error } = await db
+    .from("themes")
+    .select("*")
+    .order("start_date", { ascending: true });
+
+  if (error || !themes) {
+    console.error("Failed to fetch themes:", error);
+    return null;
+  }
+
+  for (const theme of themes) {
+    const { data: posts, error: postError } = await db
+      .from("posts")
+      .select("*")
+      .eq("theme", theme.name);
+
+    if (postError) {
+      console.error(`Error checking posts for theme ${theme.name}:`, postError);
+      continue;
+    }
+
+    const unposted = posts?.filter(p => !p.posted_at);
+
+    if (unposted && unposted.length > 0) {
+      return theme; // ✅ Found theme with remaining posts
+    }
+
+    // Optional: mark theme as used if all posts have been tweeted
+    await db.from("themes").update({ used: true }).eq("id", theme.id);
+  }
+
+  return null;
+}
+
 // Run the scheduled job
 runScheduledJob();
+
 
 
 

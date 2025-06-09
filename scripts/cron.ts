@@ -31,16 +31,13 @@ async function runScheduledJob() {
 
     console.log(`Using theme: "${currentTheme.name}" (ID: ${currentTheme.id})`);
 
-    // Fetch or generate posts for this theme
     let posts = await generatePostsForTheme(db, currentTheme);
 
     if (!posts || posts.length === 0) {
       console.log(`No posts found for theme "${currentTheme.name}". Generating posts...`);
       posts = await generatePostsForTheme(db, currentTheme);
-      console.log(`Generated ${posts.length} posts for theme "${currentTheme.name}".`);
     }
 
-    // Find next unposted post
     const nextPost = posts.find(p => !p.posted_at);
 
     if (!nextPost) {
@@ -49,16 +46,13 @@ async function runScheduledJob() {
     }
 
     console.log(`Posting tweet with Post ID: ${nextPost.id}`);
-    console.log('Tweet content:');
     console.log('>>>');
     console.log(nextPost.text);
     console.log('<<<');
 
     await postTweetToTwitter(nextPost.text);
-
     console.log('Tweet posted successfully!');
 
-    // Mark post as posted
     const { error: updateError } = await db
       .from('posts')
       .update({ posted_at: new Date().toISOString() })
@@ -86,6 +80,7 @@ async function postTweetToTwitter(text: string) {
     if (text.length > 280) {
       console.warn(`Tweet text is too long (${text.length} characters). It might be truncated.`);
     }
+
     try {
       const { data } = await twitterClient.v2.tweet(text);
       console.log('Twitter API v2 response:', data);
@@ -103,6 +98,7 @@ async function postTweetToTwitter(text: string) {
 }
 
 runScheduledJob();
+
 
 
 

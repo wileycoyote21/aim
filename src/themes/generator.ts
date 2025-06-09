@@ -23,13 +23,13 @@ const themes = [
   "creativity",
   "silence",
   "trust",
+  "confusion",
   "love",
   "wonder",
 ];
 
-// Interface for theme result with UUID id
 export interface ThemeResult {
-  id: string; // UUID
+  id: string;  // UUID support
   name: string;
 }
 
@@ -61,13 +61,9 @@ export async function generateThemeForToday(
     .select("id, theme")
     .single();
 
-  if (insertError) {
+  if (insertError || !newThemeData) {
     console.error("Failed to insert theme for today:", insertError);
-    throw new Error(`Failed to insert theme: ${JSON.stringify(insertError)}`);
-  }
-
-  if (!newThemeData) {
-    throw new Error("Failed to retrieve new theme data after insertion.");
+    throw new Error("Failed to insert or retrieve new theme.");
   }
 
   return { id: newThemeData.id, name: newThemeData.theme };
@@ -76,6 +72,7 @@ export async function generateThemeForToday(
 export function getAllThemes(): string[] {
   return [...themes];
 }
+
 
 
 

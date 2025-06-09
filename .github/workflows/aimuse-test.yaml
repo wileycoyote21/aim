@@ -1,16 +1,16 @@
-name: Manual AI Muse Tweet Push
+name: Scheduled AI Muse Tweets
 
 on:
-  # This section allows you to manually trigger the workflow from the GitHub Actions tab.
-  # You'll see a "Run workflow" button.
-  workflow_dispatch:
+  workflow_dispatch:  # Allows manual triggering
+  schedule:
+    - cron: '0 12 * * *'   # 8:00 AM EST
+    - cron: '0 0 * * *'    # 8:00 PM EST
+    - cron: '0 3 * * *'    # 11:00 PM EST
 
 jobs:
   post-tweets:
     runs-on: ubuntu-latest
     env:
-      # These are the environment variables your script needs to run.
-      # They are securely fetched from your GitHub Repository Secrets.
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -21,23 +21,19 @@ jobs:
 
     steps:
       - name: Checkout repository
-        # This step checks out your code from the repository.
         uses: actions/checkout@v4
 
       - name: Set up Node.js
-        # Configures the Node.js environment needed for your script.
         uses: actions/setup-node@v4
         with:
-          node-version: 20 # Ensures compatibility with your project
+          node-version: 20
 
       - name: Install dependencies
-        # Installs all packages listed in your package.json (e.g., Supabase client, twitter-api-v2).
         run: npm ci
 
-      - name: Run manual tweet post script
-        # Executes your TypeScript cron script using ts-node.
-        # This is the command that will attempt to post a tweet.
+      - name: Run tweet post script
         run: npm run post
+
 
 
 

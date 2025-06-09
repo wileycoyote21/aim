@@ -3,16 +3,33 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const themes = [
-  "vulnerability", "curiosity", "loneliness", "hope", "regret",
-  "gratitude", "fear", "joy", "disappointment", "resilience",
-  "empathy", "identity", "change", "loss", "connection",
-  "self-doubt", "growth", "memory", "forgiveness", "dreams",
-  "patience", "belonging", "anger", "acceptance", "creativity",
-  "silence", "trust", "confusion", "love", "wonder"
+  "vulnerability",
+  "curiosity",
+  "hope",
+  "gratitude",
+  "joy",
+  "resilience",
+  "empathy",
+  "identity",
+  "change",
+  "connection",
+  "growth",
+  "memory",
+  "forgiveness",
+  "dreams",
+  "patience",
+  "belonging",
+  "acceptance",
+  "creativity",
+  "silence",
+  "trust",
+  "love",
+  "wonder",
 ];
 
-interface ThemeResult {
-  id: string;
+// Interface for theme result with UUID id
+export interface ThemeResult {
+  id: string; // UUID
   name: string;
 }
 
@@ -22,7 +39,10 @@ export function getTodaysTheme(date = new Date()): string {
   return themes[index];
 }
 
-export async function generateThemeForToday(db: SupabaseClient, today: string): Promise<ThemeResult> {
+export async function generateThemeForToday(
+  db: SupabaseClient,
+  today: string
+): Promise<ThemeResult> {
   const { data, error } = await db
     .from("themes")
     .select("id, theme")
@@ -33,24 +53,21 @@ export async function generateThemeForToday(db: SupabaseClient, today: string): 
     return { id: data.id, name: data.theme };
   }
 
-  // If no theme exists for today, find the next unused theme
-  const { data: unusedThemes, error: fetchError } = await db
-    .from("themes")
-    .select("theme")
-    .is("used", null);
-
-  const usedSet = new Set((unusedThemes || []).map(t => t.theme));
-  const nextAvailable = themes.find(t => !usedSet.has(t)) || getTodaysTheme();
+  const themeName = getTodaysTheme();
 
   const { data: newThemeData, error: insertError } = await db
     .from("themes")
-    .insert([{ date: today, theme: nextAvailable }])
+    .insert([{ date: today, theme: themeName }])
     .select("id, theme")
     .single();
 
-  if (insertError || !newThemeData) {
-    console.error("Failed to insert new theme for today:", insertError);
+  if (insertError) {
+    console.error("Failed to insert theme for today:", insertError);
     throw new Error(`Failed to insert theme: ${JSON.stringify(insertError)}`);
+  }
+
+  if (!newThemeData) {
+    throw new Error("Failed to retrieve new theme data after insertion.");
   }
 
   return { id: newThemeData.id, name: newThemeData.theme };
@@ -59,5 +76,6 @@ export async function generateThemeForToday(db: SupabaseClient, today: string): 
 export function getAllThemes(): string[] {
   return [...themes];
 }
+
 
 

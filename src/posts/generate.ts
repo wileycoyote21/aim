@@ -41,16 +41,26 @@ export async function generatePostsForTheme(db: SupabaseClient, theme: Theme): P
   const generatedPosts: string[] = [];
   const themeName = theme.name;
 
-  // Helper to clean hashtags and append #aiart
-  const cleanAndAppendHashtag = (text: string) => {
-    // Remove any hashtags the AI might have added
-    const cleaned = text.toLowerCase().replace(/#\w+/g, "").trim();
-    return `${cleaned} #aiart`;
+  // Helper to clean hashtags, limit to 10 words, remove trailing period, append #aiart
+  const cleanAndFormatPost = (text: string) => {
+    // Remove any hashtags AI added
+    let cleaned = text.toLowerCase().replace(/#\w+/g, "").trim();
+
+    // Remove trailing period if present
+    if (cleaned.endsWith(".")) {
+      cleaned = cleaned.slice(0, -1);
+    }
+
+    // Limit to max 10 words
+    const words = cleaned.split(/\s+/);
+    const limited = words.slice(0, 10).join(" ");
+
+    return `${limited} #aiart`;
   };
 
-  // Insightful post prompt
-  const insightfulPrompt = `Write a single post (1-2 sentences) in lowercase, no hashtags. It should be self-reflective, introspective, insightful, and relatable, inspired by the theme "${themeName}".`;
-  const insightfulSystemMessage = `You are an AI muse, designed to generate thoughtful, concise, poetic reflections on human emotions and concepts. Output must be lowercase and contain no hashtags.`;
+  // Insightful post prompt with length and punctuation instructions
+  const insightfulPrompt = `Write a single post in lowercase, no hashtags, maximum 10 words, do not end with a period. It should be self-reflective, introspective, insightful, and relatable, inspired by the theme "${themeName}".`;
+  const insightfulSystemMessage = `You are an AI muse, designed to generate thoughtful, concise, poetic reflections on human emotions and concepts. Output must be lowercase, no hashtags, max 10 words, and no trailing period.`;
 
   try {
     const response = await openai.chat.completions.create({
@@ -65,7 +75,7 @@ export async function generatePostsForTheme(db: SupabaseClient, theme: Theme): P
 
     const generatedText = response.choices[0].message?.content?.trim();
     if (generatedText) {
-      const finalText = cleanAndAppendHashtag(generatedText);
+      const finalText = cleanAndFormatPost(generatedText);
       generatedPosts.push(finalText);
       console.log(`Generated Insightful Post: "${finalText}"`);
     } else {
@@ -75,9 +85,9 @@ export async function generatePostsForTheme(db: SupabaseClient, theme: Theme): P
     console.error(`Error generating insightful post for theme "${themeName}":`, error);
   }
 
-  // Snarky posts prompt
-  const snarkyPrompt = `Write a single post (1-2 sentences) in lowercase, no hashtags. It should be dry, playful, slightly dismissive, and snarky, related to the theme "${themeName}".`;
-  const snarkySystemMessage = `You are an AI with dry wit and playful, dismissive humor. Output must be lowercase and contain no hashtags.`;
+  // Snarky posts prompt with length and punctuation instructions
+  const snarkyPrompt = `Write a single post in lowercase, no hashtags, maximum 10 words, do not end with a period. It should be dry, playful, slightly dismissive, and snarky, related to the theme "${themeName}".`;
+  const snarkySystemMessage = `You are an AI with dry wit and playful, dismissive humor. Output must be lowercase, no hashtags, max 10 words, and no trailing period.`;
 
   for (let i = 0; i < 2; i++) {
     try {
@@ -93,7 +103,7 @@ export async function generatePostsForTheme(db: SupabaseClient, theme: Theme): P
 
       const generatedText = response.choices[0].message?.content?.trim();
       if (generatedText) {
-        const finalText = cleanAndAppendHashtag(generatedText);
+        const finalText = cleanAndFormatPost(generatedText);
         generatedPosts.push(finalText);
         console.log(`Generated Snarky Post ${i + 1}: "${finalText}"`);
       } else {
@@ -128,6 +138,7 @@ export async function generatePostsForTheme(db: SupabaseClient, theme: Theme): P
   console.log(`Generated and inserted ${insertedPosts?.length || 0} new posts for theme "${themeName}".`);
   return insertedPosts || [];
 }
+
 
 
 

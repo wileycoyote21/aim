@@ -55,7 +55,7 @@ export async function generatePostsForTheme(db: SupabaseClient, theme: Theme): P
     const words = cleaned.split(/\s+/);
     const limited = words.slice(0, 10).join(" ");
 
-    return `${limited} #musings #ai`;
+    return `${limited} #musings #feelings`;
   };
 
   // Insightful post prompt with length and punctuation instructions
@@ -138,6 +138,7 @@ export async function generatePostsForTheme(db: SupabaseClient, theme: Theme): P
   console.log(`Generated and inserted ${insertedPosts?.length || 0} new posts for theme "${themeName}".`);
   return insertedPosts || [];
 }
+
 
 
 

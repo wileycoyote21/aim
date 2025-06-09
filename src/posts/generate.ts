@@ -41,24 +41,18 @@ export async function generatePostsForTheme(db: SupabaseClient, theme: Theme): P
   const generatedPosts: string[] = [];
   const themeName = theme.name;
 
-  // Helper to clean hashtags, limit to 10 words, remove trailing period, append hashtags
+  // Helper to clean hashtags, limit to 10 words, remove trailing period
   const cleanAndFormatPost = (text: string) => {
-    // Remove any hashtags AI added
     let cleaned = text.toLowerCase().replace(/#\w+/g, "").trim();
 
-    // Remove trailing period if present
     if (cleaned.endsWith(".")) {
       cleaned = cleaned.slice(0, -1);
     }
 
-    // Limit to max 10 words
     const words = cleaned.split(/\s+/);
-    const limited = words.slice(0, 10).join(" ");
-
-    return `${limited} #musings #ai`;
+    return words.slice(0, 10).join(" ");
   };
 
-  // Insightful post prompt with length and punctuation instructions
   const insightfulPrompt = `Write a single post in lowercase, no hashtags, maximum 10 words, do not end with a period. It should be self-reflective, introspective, insightful, and relatable, inspired by the theme "${themeName}".`;
   const insightfulSystemMessage = `You are an AI muse, designed to generate thoughtful, concise, poetic reflections on human emotions and concepts. Output must be lowercase, no hashtags, max 10 words, and no trailing period.`;
 
@@ -85,7 +79,6 @@ export async function generatePostsForTheme(db: SupabaseClient, theme: Theme): P
     console.error(`Error generating insightful post for theme "${themeName}":`, error);
   }
 
-  // Snarky posts prompt with length and punctuation instructions
   const snarkyPrompt = `Write a single post in lowercase, no hashtags, maximum 10 words, do not end with a period. It should be dry, playful, slightly dismissive, and snarky, related to the theme "${themeName}".`;
   const snarkySystemMessage = `You are an AI with dry wit and playful, dismissive humor. Output must be lowercase, no hashtags, max 10 words, and no trailing period.`;
 
@@ -138,6 +131,7 @@ export async function generatePostsForTheme(db: SupabaseClient, theme: Theme): P
   console.log(`Generated and inserted ${insertedPosts?.length || 0} new posts for theme "${themeName}".`);
   return insertedPosts || [];
 }
+
 
 
 

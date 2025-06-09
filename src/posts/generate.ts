@@ -13,7 +13,7 @@ interface Theme {
 
 // Define the Post interface for consistency and type safety
 interface Post {
-    id: number; // Assuming the ID from your Supabase 'posts' table is a number
+    id: string; // UUID from Supabase 'posts' table
     text: string;
     theme: string; // This column likely stores the theme name directly
     posted_at: string | null; // ISO string if posted, null otherwise

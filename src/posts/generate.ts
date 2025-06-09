@@ -41,7 +41,7 @@ export async function generatePostsForTheme(db: SupabaseClient, theme: Theme): P
   const generatedPosts: string[] = [];
   const themeName = theme.name;
 
-  // Helper to clean hashtags, limit to 10 words, remove trailing period, append #aiart
+  // Helper to clean hashtags, limit to 10 words, remove trailing period, append hashtags
   const cleanAndFormatPost = (text: string) => {
     // Remove any hashtags AI added
     let cleaned = text.toLowerCase().replace(/#\w+/g, "").trim();
@@ -55,7 +55,7 @@ export async function generatePostsForTheme(db: SupabaseClient, theme: Theme): P
     const words = cleaned.split(/\s+/);
     const limited = words.slice(0, 10).join(" ");
 
-    return `${limited} #aiart`;
+    return `${limited} #musings #ai`;
   };
 
   // Insightful post prompt with length and punctuation instructions
@@ -138,6 +138,7 @@ export async function generatePostsForTheme(db: SupabaseClient, theme: Theme): P
   console.log(`Generated and inserted ${insertedPosts?.length || 0} new posts for theme "${themeName}".`);
   return insertedPosts || [];
 }
+
 
 
 

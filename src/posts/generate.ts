@@ -1,38 +1,30 @@
 // src/posts/generate.ts
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { OpenAI } from "openai"; // Import OpenAI client
+import { OpenAI } from "openai";
 
-const openai = new OpenAI(); // Initialize OpenAI client here
+const openai = new OpenAI();
 
-// Define the Theme interface, as it's now an object passed from cron.ts
 interface Theme {
-  id: number; // Assuming the ID from your Supabase 'themes' table is a number
-  name: string; // The actual theme string (e.g., "fear")
+  id: number;
+  name: string;
 }
 
-// Define the Post interface for consistency and type safety
 interface Post {
-    id: string; // UUID from Supabase 'posts' table
-    text: string;
-    theme: string; // This column likely stores the theme name directly
-    posted_at: string | null; // ISO string if posted, null otherwise
-    created_at: string; // ISO string for creation date
-    // Add any other properties your 'posts' table rows might have
+  id: string;
+  text: string;
+  theme: string;
+  posted_at: string | null;
+  created_at: string;
 }
 
-/**
- * Generates posts for a given theme, or returns existing ones if they exist.
- * This function now expects a Theme object as its 'theme' argument.
- */
 export async function generatePostsForTheme(db: SupabaseClient, theme: Theme): Promise<Post[]> {
-  // 1. Check if posts already exist for this theme (using theme.name)
   console.log(`Checking for existing posts for theme name: "${theme.name}"`);
   const { data: existingPosts, error: fetchError } = await db
     .from("posts")
     .select("*")
-    .eq("theme", theme.name) // Filter by the theme's name
-    .order('created_at', { ascending: true }); // Order for consistent selection later
+    .eq("theme", theme.name)
+    .order("created_at", { ascending: true });
 
   if (fetchError) {
     console.error("Failed to fetch existing posts:", fetchError);
@@ -44,15 +36,21 @@ export async function generatePostsForTheme(db: SupabaseClient, theme: Theme): P
     return existingPosts;
   }
 
-  // 2. If no posts exist, generate new ones using OpenAI based on the theme.name
   console.log(`No posts found for theme "${theme.name}". Generating new ones with OpenAI...`);
 
   const generatedPosts: string[] = [];
-  const themeName = theme.name; // For easier use in prompts
+  const themeName = theme.name;
 
-  // --- Prompt for the single insightful, self-reflective, relatable post ---
-  const insightfulPrompt = `Write a single post (1-2 sentences) in lowercase, without hashtags. It should be self-reflective, introspective, insightful, and relatable, focusing on the theme of "${themeName}".`;
-  const insightfulSystemMessage = `You are an AI muse, designed to generate thoughtful, concise, and poetic reflections on human emotions and concepts. Your output must be entirely lowercase and free of hashtags.`;
+  // Helper to clean hashtags and append #aiart
+  const cleanAndAppendHashtag = (text: string) => {
+    // Remove any hashtags the AI might have added
+    const cleaned = text.toLowerCase().replace(/#\w+/g, "").trim();
+    return `${cleaned} #aiart`;
+  };
+
+  // Insightful post prompt
+  const insightfulPrompt = `Write a single post (1-2 sentences) in lowercase, no hashtags. It should be self-reflective, introspective, insightful, and relatable, inspired by the theme "${themeName}".`;
+  const insightfulSystemMessage = `You are an AI muse, designed to generate thoughtful, concise, poetic reflections on human emotions and concepts. Output must be lowercase and contain no hashtags.`;
 
   try {
     const response = await openai.chat.completions.create({
@@ -61,27 +59,27 @@ export async function generatePostsForTheme(db: SupabaseClient, theme: Theme): P
         { role: "system", content: insightfulSystemMessage },
         { role: "user", content: insightfulPrompt },
       ],
-      temperature: 0.8, // Slightly higher for more "insightful" creativity
-      max_tokens: 50, // Enough for 1-2 concise sentences
+      temperature: 0.8,
+      max_tokens: 50,
     });
 
     const generatedText = response.choices[0].message?.content?.trim();
     if (generatedText) {
-      const cleanedText = generatedText.toLowerCase().replace(/#\w+/g, '').trim();
-      generatedPosts.push(cleanedText);
-      console.log(`Generated Insightful Post: "${cleanedText}"`);
+      const finalText = cleanAndAppendHashtag(generatedText);
+      generatedPosts.push(finalText);
+      console.log(`Generated Insightful Post: "${finalText}"`);
     } else {
       console.warn(`OpenAI did not return insightful content for theme "${themeName}".`);
     }
-  } catch (openAiError) {
-    console.error(`Error generating insightful post for theme "${themeName}":`, openAiError);
+  } catch (error) {
+    console.error(`Error generating insightful post for theme "${themeName}":`, error);
   }
 
-  // --- Prompts for the two dry, playful, slightly dismissive posts (snarky humor) ---
-  const snarkyPrompt = `Write a single post (1-2 sentences) in lowercase, without hashtags. It should be dry, playful, slightly dismissive, and have a touch of snarky humor, related to the theme of "${themeName}".`;
-  const snarkySystemMessage = `You are an AI with a dry wit and playful, dismissive humor, observing human concepts. Your output must be entirely lowercase and free of hashtags.`;
+  // Snarky posts prompt
+  const snarkyPrompt = `Write a single post (1-2 sentences) in lowercase, no hashtags. It should be dry, playful, slightly dismissive, and snarky, related to the theme "${themeName}".`;
+  const snarkySystemMessage = `You are an AI with dry wit and playful, dismissive humor. Output must be lowercase and contain no hashtags.`;
 
-  for (let i = 0; i < 2; i++) { // Generate two snarky posts
+  for (let i = 0; i < 2; i++) {
     try {
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
@@ -89,40 +87,38 @@ export async function generatePostsForTheme(db: SupabaseClient, theme: Theme): P
           { role: "system", content: snarkySystemMessage },
           { role: "user", content: snarkyPrompt },
         ],
-        temperature: 0.9, // Higher for more distinct humor
-        max_tokens: 50, // Enough for 1-2 concise sentences
+        temperature: 0.9,
+        max_tokens: 50,
       });
 
       const generatedText = response.choices[0].message?.content?.trim();
       if (generatedText) {
-        const cleanedText = generatedText.toLowerCase().replace(/#\w+/g, '').trim();
-        generatedPosts.push(cleanedText);
-        console.log(`Generated Snarky Post ${i + 1}: "${cleanedText}"`);
+        const finalText = cleanAndAppendHashtag(generatedText);
+        generatedPosts.push(finalText);
+        console.log(`Generated Snarky Post ${i + 1}: "${finalText}"`);
       } else {
         console.warn(`OpenAI did not return snarky content for theme "${themeName}" on attempt ${i + 1}.`);
       }
-    } catch (openAiError) {
-      console.error(`Error generating snarky post ${i + 1} for theme "${themeName}":`, openAiError);
+    } catch (error) {
+      console.error(`Error generating snarky post ${i + 1} for theme "${themeName}":`, error);
     }
   }
 
-  // --- Ensure at least one post was generated ---
   if (generatedPosts.length === 0) {
-      throw new Error(`Failed to generate any posts for theme "${themeName}" after all attempts.`);
+    throw new Error(`Failed to generate any posts for theme "${themeName}".`);
   }
 
-  const postsToInsert = generatedPosts.map(text => ({
-    theme: themeName, // Link the new posts to the theme's name
-    text: text,
-    created_at: new Date().toISOString(), // Use current timestamp for creation
-    posted_at: null, // Initially not posted
-    // Add any other default fields your 'posts' table requires (e.g., sentiment_score, tweet_id)
+  const postsToInsert = generatedPosts.map((text) => ({
+    theme: themeName,
+    text,
+    created_at: new Date().toISOString(),
+    posted_at: null,
   }));
 
   const { data: insertedPosts, error: insertError } = await db
     .from("posts")
     .insert(postsToInsert)
-    .select('*'); // Select all columns of the newly inserted posts to return them
+    .select("*");
 
   if (insertError) {
     console.error("Failed to insert new posts:", insertError);
@@ -132,4 +128,6 @@ export async function generatePostsForTheme(db: SupabaseClient, theme: Theme): P
   console.log(`Generated and inserted ${insertedPosts?.length || 0} new posts for theme "${themeName}".`);
   return insertedPosts || [];
 }
+
+
 

@@ -1,14 +1,17 @@
 // scripts/cron.ts
 
-import { db } from '../src/db/client'; // Your Supabase client setup
+import { db } from '../src/db/client';
 import { TwitterApi } from 'twitter-api-v2';
 import { generatePostsForTheme } from '../src/posts/generate';
+import { generateThemeForToday } from '../src/themes/generator';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 // Interfaces for Supabase tables
 interface Theme {
-  id: number;
+  id: string;
   name: string;
-  used?: boolean;
+  used: boolean;
+  start_date: string | null;
 }
 
 interface Post {
@@ -27,48 +30,79 @@ const twitterClient = new TwitterApi({
   accessSecret: process.env.TWITTER_ACCESS_TOKEN_SECRET as string,
 });
 
+// Find the next theme with unposted posts
+async function getNextThemeToPost(db: SupabaseClient): Promise<Theme | null> {
+  const { data: themes, error } = await db
+    .from('themes')
+    .select('*')
+    .order('start_date', { ascending: true });
+
+  if (error) {
+    console.error('Failed to fetch themes:', error);
+    return null;
+  }
+
+  for (const theme of themes) {
+    const { data: posts, error: postsError } = await db
+      .from('posts')
+      .select('*')
+      .eq('theme', theme.name);
+
+    if (postsError) {
+      console.error(`Failed to fetch posts for theme "${theme.name}":`, postsError);
+      continue;
+    }
+
+    const unposted = posts.filter(p => !p.posted_at);
+    if (unposted.length > 0) {
+      return theme;
+    }
+  }
+
+  return null;
+}
+
 async function runScheduledJob() {
   try {
     console.log('--- Starting Scheduled Job ---');
     console.log('Supabase Client initialized.');
     console.log('Twitter Client initialized.');
 
-    const currentTheme = await getNextThemeToPost(db);
-    if (!currentTheme) {
-      console.warn('No valid themes with unposted posts found. Exiting...');
-      return;
-    }
-
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    let currentTheme = await generateThemeForToday(db, today);
     console.log(`Using theme: "${currentTheme.name}" (ID: ${currentTheme.id})`);
 
-    // Fetch posts for current theme
+    // Get or generate posts for the current theme
     let posts = await generatePostsForTheme(db, currentTheme);
 
-    if (!posts || posts.length === 0) {
-      console.log(`No posts found for theme "${currentTheme.name}". Generating 3 new posts...`);
-      posts = await generatePostsForTheme(db, currentTheme);
-      console.log(`Generated ${posts.length} posts for theme "${currentTheme.name}".`);
-    }
+    let nextThemePost = posts.find(p => !p.posted_at);
 
-    // Pick the next unposted post
-    const nextThemePost = posts.find(p => !p.posted_at);
+    // If all posts for current theme are used, rotate to next theme
     if (!nextThemePost) {
-      console.warn(`All posts for theme "${currentTheme.name}" have been posted.`);
+      console.log(`All posts for theme "${currentTheme.name}" have been posted. Trying to rotate to next theme...`);
+      const nextTheme = await getNextThemeToPost(db);
+      if (!nextTheme) {
+        console.warn('No available theme found with unposted content. Exiting.');
+        return;
+      }
 
-      // Optionally mark the theme as used
-      await db.from("themes").update({ used: true }).eq("id", currentTheme.id);
-      return;
+      console.log(`Rotated to theme: "${nextTheme.name}" (ID: ${nextTheme.id})`);
+      posts = await generatePostsForTheme(db, nextTheme);
+      nextThemePost = posts.find(p => !p.posted_at);
+
+      if (!nextThemePost) {
+        console.warn(`Still no unposted content available after rotation. Exiting.`);
+        return;
+      }
     }
 
     const postToTweet = nextThemePost;
-    console.log(`Using next regular theme post (ID: ${postToTweet.id}).`);
 
     if (!postToTweet.text) {
       throw new Error('No valid post content available to tweet.');
     }
 
     console.log('Attempting to post tweet...');
-    console.log('Tweet content:');
     console.log('>>> TWEET TEXT START <<<');
     console.log(postToTweet.text);
     console.log('>>> TWEET TEXT END <<<');
@@ -87,10 +121,9 @@ async function runScheduledJob() {
       console.error('Failed to update post status in Supabase:', updateError);
       throw new Error(`Failed to update post ID ${postToTweet.id}: ${JSON.stringify(updateError)}`);
     }
+
     console.log(`Post ID ${postToTweet.id} marked as posted in database.`);
-
     console.log('--- Scheduled Job Completed Successfully ---');
-
   } catch (error: any) {
     console.error('\n--- Error in Scheduled Run ---');
     console.error('Error message:', error.message);
@@ -107,6 +140,7 @@ async function postTweetToTwitter(tweetText: string) {
     if (tweetText.length > 280) {
       console.warn(`Tweet text is too long (${tweetText.length} chars). It might be truncated.`);
     }
+
     try {
       const { data } = await twitterClient.v2.tweet(tweetText);
       console.log('Twitter API v2 response:', data);
@@ -123,43 +157,9 @@ async function postTweetToTwitter(tweetText: string) {
   }
 }
 
-async function getNextThemeToPost(db: typeof import('@supabase/supabase-js').SupabaseClient): Promise<Theme | null> {
-  const { data: themes, error } = await db
-    .from("themes")
-    .select("*")
-    .order("start_date", { ascending: true });
-
-  if (error || !themes) {
-    console.error("Failed to fetch themes:", error);
-    return null;
-  }
-
-  for (const theme of themes) {
-    const { data: posts, error: postError } = await db
-      .from("posts")
-      .select("*")
-      .eq("theme", theme.name);
-
-    if (postError) {
-      console.error(`Error checking posts for theme ${theme.name}:`, postError);
-      continue;
-    }
-
-    const unposted = posts?.filter(p => !p.posted_at);
-
-    if (unposted && unposted.length > 0) {
-      return theme; // ✅ Found theme with remaining posts
-    }
-
-    // Optional: mark theme as used if all posts have been tweeted
-    await db.from("themes").update({ used: true }).eq("id", theme.id);
-  }
-
-  return null;
-}
-
 // Run the scheduled job
 runScheduledJob();
+
 
 
 

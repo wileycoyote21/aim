@@ -1,4 +1,5 @@
-// src/scripts/cron.ts
+import dotenv from 'dotenv';
+dotenv.config();
 
 import { createClient } from '@supabase/supabase-js';
 import { generateThemeForToday, ThemeResult } from '../src/themes/generator';
@@ -17,11 +18,9 @@ async function runCron() {
     console.log('Supabase Client initialized.');
     console.log('--- Starting Scheduled Job ---');
 
-    // 1. Get today's theme
     const today = new Date().toISOString().slice(0, 10);
     const theme: ThemeResult = await generateThemeForToday(supabase, today);
 
-    // 2. Check how many posts exist for this theme
     let { data: posts, error: postsError } = await supabase
       .from('posts')
       .select('*')
@@ -30,7 +29,6 @@ async function runCron() {
 
     if (postsError) throw new Error(`Error fetching posts: ${postsError.message}`);
 
-    // 3. If no posts for this theme, create 3 new posts (dummy content here — replace with your generation logic)
     if (!posts || posts.length === 0) {
       const newPosts = [
         { theme: theme.name, content: `${theme.name} post 1`, posted: false },
@@ -45,10 +43,8 @@ async function runCron() {
       console.log(`Created 3 new posts for theme "${theme.name}".`);
     }
 
-    // 4. Find the next post to publish (first post with posted=false)
     const nextPost = posts.find(p => !p.posted);
     if (!nextPost) {
-      // All posts posted, mark theme as used and exit (next run picks next theme)
       const { error: updateThemeError } = await supabase
         .from('themes')
         .update({ used: true })
@@ -60,11 +56,9 @@ async function runCron() {
       return;
     }
 
-    // 5. Post to Twitter
     await twitterClient.v2.tweet(nextPost.content);
     console.log(`Posted tweet for theme "${theme.name}": ${nextPost.content}`);
 
-    // 6. Mark post as posted
     const { error: updatePostError } = await supabase
       .from('posts')
       .update({ posted: true })
@@ -81,6 +75,7 @@ async function runCron() {
 }
 
 runCron();
+
 
 
 

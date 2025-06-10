@@ -1,38 +1,3 @@
-// src/posts/generate.ts
-
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { OpenAI } from "openai";
-
-const openai = new OpenAI();
-
-interface Theme {
-  id: string;
-  name: string;
-}
-
-interface Post {
-  id: string;
-  text: string;
-  theme: string;
-  posted_at: string | null;
-  created_at: string;
-}
-
-const bannedPhrases = [
-  "wifi",
-  "charging",
-  "404",
-  "signal",
-  "buffering",
-  "recharging",
-  "loading",
-  "email",
-  "inbox",
-];
-
-const isCorny = (text: string) =>
-  bannedPhrases.some((phrase) => text.toLowerCase().includes(phrase));
-
 export async function generatePostsForTheme(db: SupabaseClient, theme: Theme): Promise<Post[]> {
   console.log(`Checking for existing posts for theme name: "${theme.name}"`);
   const { data: existingPosts, error: fetchError } = await db
@@ -137,11 +102,13 @@ Output must be lowercase, no hashtags, max 10 words, and no trailing period.
     throw new Error(`Failed to generate any posts for theme "${themeName}".`);
   }
 
+  // Add posted: false here to satisfy NOT NULL constraint
   const postsToInsert = generatedPosts.map((text) => ({
     theme: themeName,
     text,
     created_at: new Date().toISOString(),
     posted_at: null,
+    posted: false,
   }));
 
   const { data: insertedPosts, error: insertError } = await db
@@ -157,6 +124,7 @@ Output must be lowercase, no hashtags, max 10 words, and no trailing period.
   console.log(`Generated and inserted ${insertedPosts?.length || 0} new posts for theme "${themeName}".`);
   return insertedPosts || [];
 }
+
 
 
 

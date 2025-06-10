@@ -1,7 +1,9 @@
+// scripts/cron.ts
+
 import { db } from '../src/db/client';
 import { TwitterApi } from 'twitter-api-v2';
 import { generatePostsForTheme } from '../src/posts/generate';
-import { generateThemeForToday, markThemeAsUsed } from '../src/themes/generator';
+import { generateThemeForToday, ThemeResult } from '../src/themes/generator';
 
 interface Post {
   id: string;
@@ -24,32 +26,43 @@ async function runScheduledJob() {
     console.log('Supabase Client initialized.');
     console.log('Twitter Client initialized.');
 
-    // Get next theme to post
-    const currentTheme = await generateThemeForToday(db);
+    const today = new Date().toISOString().split('T')[0];
+    const currentTheme: ThemeResult = await generateThemeForToday(db, today);
+
     console.log(`Using theme: "${currentTheme.name}" (ID: ${currentTheme.id})`);
 
-    // Get or generate posts for theme
     let posts = await generatePostsForTheme(db, currentTheme);
 
+    // If no posts found for current theme, generate 3 new posts
     if (!posts || posts.length === 0) {
-      console.log(`No posts found for theme "${currentTheme.name}". Generating posts...`);
+      console.log(`No posts found for theme "${currentTheme.name}". Generating 3 new posts...`);
       posts = await generatePostsForTheme(db, currentTheme);
+      if (!posts || posts.length === 0) {
+        throw new Error(`Failed to generate posts for theme "${currentTheme.name}"`);
+      }
     }
 
-    // Find next unposted post
+    // Find the next post that hasn’t been posted yet
     const nextPost = posts.find(p => !p.posted_at);
 
     if (!nextPost) {
-      console.log(`All posts for theme "${currentTheme.name}" have been posted.`);
+      // All posts posted — mark current theme as used and rotate to next theme on next run
+      console.log(`All posts for theme "${currentTheme.name}" have been posted. Marking theme as used.`);
 
-      // Mark theme as used in DB and rotate to next theme next run
-      await markThemeAsUsed(db, currentTheme.id);
-      console.log(`Theme "${currentTheme.name}" marked as used.`);
+      const { error: updateThemeError } = await db
+        .from('themes')
+        .update({ used: true })
+        .eq('id', currentTheme.id);
 
-      // Exit early, next cron run will pick next theme and posts
+      if (updateThemeError) {
+        throw new Error(`Failed to update theme used status: ${JSON.stringify(updateThemeError)}`);
+      }
+
+      console.log('Theme marked as used. No tweet this run.');
       return;
     }
 
+    // Post the tweet text
     console.log(`Posting tweet with Post ID: ${nextPost.id}`);
     console.log('>>>');
     console.log(nextPost.text);
@@ -58,20 +71,18 @@ async function runScheduledJob() {
     await postTweetToTwitter(nextPost.text);
     console.log('Tweet posted successfully!');
 
-    // Update post as posted_at now
-    const { error: updateError } = await db
+    // Mark post as posted
+    const { error: updatePostError } = await db
       .from('posts')
       .update({ posted_at: new Date().toISOString() })
       .eq('id', nextPost.id);
 
-    if (updateError) {
-      console.error('Failed to update post status:', updateError);
-      throw new Error(`Failed to update post: ${JSON.stringify(updateError)}`);
+    if (updatePostError) {
+      throw new Error(`Failed to update post status: ${JSON.stringify(updatePostError)}`);
     }
 
     console.log(`Post ID ${nextPost.id} marked as posted.`);
     console.log('--- Scheduled Job Completed Successfully ---');
-
   } catch (error: any) {
     console.error('\n--- Error in Scheduled Job ---');
     console.error('Error message:', error.message);
@@ -104,6 +115,7 @@ async function postTweetToTwitter(text: string) {
 }
 
 runScheduledJob();
+
 
 
 

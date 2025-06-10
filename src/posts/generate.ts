@@ -1,3 +1,31 @@
+import { SupabaseClient } from '@supabase/supabase-js';
+import OpenAI from 'openai';
+
+// Adjust or replace with your actual types
+export interface Theme {
+  id: string;
+  name: string;
+  // add other properties if needed
+}
+
+export interface Post {
+  id?: string;
+  theme: string;
+  text: string;
+  created_at?: string;
+  posted_at?: string | null;
+  posted: boolean;
+}
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY!,
+});
+
+function isCorny(text: string): boolean {
+  const cornyWords = ['wifi', 'charging', 'buffering', 'email', 'meme'];
+  return cornyWords.some(word => text.toLowerCase().includes(word));
+}
+
 export async function generatePostsForTheme(db: SupabaseClient, theme: Theme): Promise<Post[]> {
   console.log(`Checking for existing posts for theme name: "${theme.name}"`);
   const { data: existingPosts, error: fetchError } = await db
@@ -124,6 +152,7 @@ Output must be lowercase, no hashtags, max 10 words, and no trailing period.
   console.log(`Generated and inserted ${insertedPosts?.length || 0} new posts for theme "${themeName}".`);
   return insertedPosts || [];
 }
+
 
 
 

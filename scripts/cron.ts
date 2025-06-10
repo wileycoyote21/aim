@@ -1,4 +1,4 @@
-import dotenv from 'dotenv';
+import * as dotenv from 'dotenv';
 dotenv.config();
 
 import { createClient } from '@supabase/supabase-js';
@@ -6,11 +6,10 @@ import { generateThemeForToday, ThemeResult } from '../src/themes/generator';
 import TwitterApi from 'twitter-api-v2';
 
 const SUPABASE_URL = process.env.SUPABASE_URL!;
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY!;
+const SUPABASE_KEY = process.env.SUPABASE_KEY!;
 const TWITTER_BEARER_TOKEN = process.env.TWITTER_BEARER_TOKEN!;
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const twitterClient = new TwitterApi(TWITTER_BEARER_TOKEN);
 
 async function runCron() {
@@ -18,9 +17,11 @@ async function runCron() {
     console.log('Supabase Client initialized.');
     console.log('--- Starting Scheduled Job ---');
 
+    // 1. Get today's theme
     const today = new Date().toISOString().slice(0, 10);
     const theme: ThemeResult = await generateThemeForToday(supabase, today);
 
+    // 2. Check existing posts for this theme
     let { data: posts, error: postsError } = await supabase
       .from('posts')
       .select('*')
@@ -29,6 +30,7 @@ async function runCron() {
 
     if (postsError) throw new Error(`Error fetching posts: ${postsError.message}`);
 
+    // 3. If no posts, create 3 new dummy posts for the theme
     if (!posts || posts.length === 0) {
       const newPosts = [
         { theme: theme.name, content: `${theme.name} post 1`, posted: false },
@@ -43,8 +45,10 @@ async function runCron() {
       console.log(`Created 3 new posts for theme "${theme.name}".`);
     }
 
+    // 4. Find next unposted post
     const nextPost = posts.find(p => !p.posted);
     if (!nextPost) {
+      // All posts posted, mark theme as used
       const { error: updateThemeError } = await supabase
         .from('themes')
         .update({ used: true })
@@ -56,9 +60,11 @@ async function runCron() {
       return;
     }
 
+    // 5. Post tweet
     await twitterClient.v2.tweet(nextPost.content);
     console.log(`Posted tweet for theme "${theme.name}": ${nextPost.content}`);
 
+    // 6. Mark post as posted
     const { error: updatePostError } = await supabase
       .from('posts')
       .update({ posted: true })
@@ -75,6 +81,7 @@ async function runCron() {
 }
 
 runCron();
+
 
 
 

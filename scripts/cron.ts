@@ -1,14 +1,21 @@
-import 'dotenv/config';
 import { createClient } from '@supabase/supabase-js';
 import { generateThemeForToday, ThemeResult } from '../src/themes/generator';
-import { TwitterApi } from 'twitter-api-v2';
+import TwitterApi from 'twitter-api-v2';
+import dotenv from 'dotenv';
+
+dotenv.config(); // Load .env variables
 
 const SUPABASE_URL = process.env.SUPABASE_URL!;
 const SUPABASE_KEY = process.env.SUPABASE_KEY!;
-const TWITTER_BEARER_TOKEN = process.env.TWITTER_BEARER_TOKEN!;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-const twitterClient = new TwitterApi(TWITTER_BEARER_TOKEN);
+
+const twitterClient = new TwitterApi({
+  appKey: process.env.TWITTER_API_KEY!,
+  appSecret: process.env.TWITTER_API_SECRET!,
+  accessToken: process.env.TWITTER_ACCESS_TOKEN!,
+  accessSecret: process.env.TWITTER_ACCESS_TOKEN_SECRET!,
+});
 
 async function runCron() {
   try {
@@ -17,7 +24,6 @@ async function runCron() {
 
     const today = new Date().toISOString().slice(0, 10);
     const theme: ThemeResult = await generateThemeForToday(supabase, today);
-    console.log(`Selected theme: ${theme.name}`);
 
     let { data: posts, error: postsError } = await supabase
       .from('posts')
@@ -28,12 +34,11 @@ async function runCron() {
     if (postsError) throw new Error(`Error fetching posts: ${postsError.message}`);
 
     if (!posts || posts.length === 0) {
-      const newPosts = [1, 2, 3].map(i => ({
-        theme: theme.name,
-        content: `${theme.name} post ${i}`,
-        text: `${theme.name} post ${i}`,
-        posted: false,
-      }));
+      const newPosts = [
+        { theme: theme.name, content: `${theme.name} post 1`, text: `${theme.name} post 1` },
+        { theme: theme.name, content: `${theme.name} post 2`, text: `${theme.name} post 2` },
+        { theme: theme.name, content: `${theme.name} post 3`, text: `${theme.name} post 3` },
+      ];
 
       const { error: insertError } = await supabase.from('posts').insert(newPosts);
       if (insertError) throw new Error(`Error inserting posts: ${insertError.message}`);
@@ -55,8 +60,8 @@ async function runCron() {
       return;
     }
 
-    await twitterClient.v2.tweet(nextPost.text);
-    console.log(`Tweet posted: ${nextPost.text}`);
+    await twitterClient.v1.tweet(nextPost.content);
+    console.log(`Posted tweet for theme "${theme.name}": ${nextPost.content}`);
 
     const { error: updatePostError } = await supabase
       .from('posts')
@@ -64,9 +69,6 @@ async function runCron() {
       .eq('id', nextPost.id);
 
     if (updatePostError) throw new Error(`Error marking post as posted: ${updatePostError.message}`);
-
-    console.log(`Marked post as posted: ${nextPost.id}`);
-    console.log('--- Cron Job Completed ---');
 
   } catch (error: any) {
     console.error('--- Error in Scheduled Job ---');

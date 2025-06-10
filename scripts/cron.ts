@@ -3,6 +3,7 @@ dotenv.config();
 
 import { createClient } from '@supabase/supabase-js';
 import { generateThemeForToday, ThemeResult } from '../src/themes/generator';
+import { generatePostsForTheme } from '../src/posts/generate';
 import TwitterApi from 'twitter-api-v2';
 
 const SUPABASE_URL = process.env.SUPABASE_URL!;
@@ -42,19 +43,10 @@ async function runCron() {
 
     if (postsError) throw new Error(`Error fetching posts: ${postsError.message}`);
 
-    // 3. Create 3 new posts if none exist
+    // 3. Generate posts if none exist
     if (!posts || posts.length === 0) {
-      const newPosts = [
-        { theme: theme.name, content: `${theme.name} post 1`, text: `${theme.name} post 1` },
-        { theme: theme.name, content: `${theme.name} post 2`, text: `${theme.name} post 2` },
-        { theme: theme.name, content: `${theme.name} post 3`, text: `${theme.name} post 3` },
-      ];
-
-      const { error: insertError } = await supabase.from('posts').insert(newPosts);
-      if (insertError) throw new Error(`Error inserting posts: ${insertError.message}`);
-
-      posts = newPosts;
-      console.log(`Created 3 new posts for theme "${theme.name}".`);
+      posts = await generatePostsForTheme(supabase, { id: theme.id, name: theme.name });
+      console.log(`Generated and inserted posts for theme "${theme.name}".`);
     }
 
     // 4. Find the next unposted post
@@ -73,8 +65,8 @@ async function runCron() {
     }
 
     // 5. Post to Twitter
-    await twitterClient.v2.tweet(nextPost.content);
-    console.log(`Posted tweet for theme "${theme.name}": ${nextPost.content}`);
+    await twitterClient.v2.tweet(nextPost.text);
+    console.log(`Posted tweet for theme "${theme.name}": ${nextPost.text}`);
 
     // 6. Mark post as posted
     const { error: updatePostError } = await supabase
@@ -93,6 +85,7 @@ async function runCron() {
 }
 
 runCron();
+
 
 
 

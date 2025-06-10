@@ -1,77 +1,75 @@
 // src/themes/generator.ts
 
-import type { SupabaseClient } from "@supabase/supabase-js";
-
-const themes = [
-  "vulnerability",
-  "curiosity",
-  "hope",
-  "gratitude",
-  "joy",
-  "resilience",
-  "empathy",
-  "identity",
-  "change",
-  "connection",
-  "growth",
-  "memory",
-  "forgiveness",
-  "dreams",
-  "patience",
-  "belonging",
-  "acceptance",
-  "creativity",
-  "silence",
-  "trust",
-  "confusion",
-  "love",
-  "wonder",
-];
+import { SupabaseClient } from '@supabase/supabase-js';
 
 export interface ThemeResult {
-  id: string;  // UUID support
+  id: string;
   name: string;
 }
 
-export function getTodaysTheme(date = new Date()): string {
-  const dayOfMonth = date.getUTCDate();
-  const index = (dayOfMonth - 1) % themes.length;
-  return themes[index];
-}
+export async function generateThemeForToday(db: SupabaseClient, today: string): Promise<ThemeResult> {
+  // Step 1: fetch all unused themes
+  let { data: themes, error } = await db
+    .from('themes')
+    .select('*')
+    .eq('used', false);
 
-export async function generateThemeForToday(
-  db: SupabaseClient,
-  today: string
-): Promise<ThemeResult> {
-  const { data, error } = await db
-    .from("themes")
-    .select("id, theme")
-    .eq("date", today)
-    .single();
+  if (error) throw new Error(`Error fetching themes: ${error.message}`);
 
-  if (data) {
-    return { id: data.id, name: data.theme };
+  // Step 2: if no unused themes, reset all themes to unused and re-fetch
+  if (!themes || themes.length === 0) {
+    console.log('All themes used — resetting all to unused.');
+    const { error: resetError } = await db
+      .from('themes')
+      .update({ used: false });
+
+    if (resetError) throw new Error(`Error resetting themes: ${resetError.message}`);
+
+    const { data: resetThemes, error: refetchError } = await db
+      .from('themes')
+      .select('*')
+      .eq('used', false);
+
+    if (refetchError) throw new Error(`Error re-fetching themes: ${refetchError.message}`);
+    if (!resetThemes || resetThemes.length === 0) throw new Error('No themes found after reset.');
+
+    themes = resetThemes;
   }
 
-  const themeName = getTodaysTheme();
+  // Step 3: shuffle themes to randomize order
+  shuffleArray(themes);
 
-  const { data: newThemeData, error: insertError } = await db
-    .from("themes")
-    .insert([{ date: today, theme: themeName }])
-    .select("id, theme")
-    .single();
+  // Step 4: pick first theme with fewer than 3 posts
+  for (const theme of themes) {
+    const { data: posts, error: postError } = await db
+      .from('posts')
+      .select('id')
+      .eq('theme_id', theme.id);
 
-  if (insertError || !newThemeData) {
-    console.error("Failed to insert theme for today:", insertError);
-    throw new Error("Failed to insert or retrieve new theme.");
+    if (postError) throw new Error(`Error fetching posts for theme ${theme.theme}: ${postError.message}`);
+
+    if ((posts?.length || 0) < 3) {
+      return {
+        id: theme.id,
+        name: theme.theme,
+      };
+    } else {
+      // mark theme as used if it already has 3 or more posts
+      await db.from('themes').update({ used: true }).eq('id', theme.id);
+    }
   }
 
-  return { id: newThemeData.id, name: newThemeData.theme };
+  // fallback, retry in case no theme matched (should rarely happen)
+  return generateThemeForToday(db, today);
 }
 
-export function getAllThemes(): string[] {
-  return [...themes];
+function shuffleArray(array: any[]) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
 }
+
 
 
 

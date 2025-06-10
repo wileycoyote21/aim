@@ -42,6 +42,13 @@ async function runScheduledJob() {
 
     if (!nextPost) {
       console.warn(`All posts for theme "${currentTheme.name}" have been posted. No tweet this run.`);
+
+      // ✅ Mark theme as used so the next one is selected next run
+      await db
+        .from('themes')
+        .update({ used: true })
+        .eq('id', currentTheme.id);
+
       return;
     }
 
@@ -64,8 +71,18 @@ async function runScheduledJob() {
     }
 
     console.log(`Post ID ${nextPost.id} marked as posted.`);
-    console.log('--- Scheduled Job Completed Successfully ---');
 
+    // ✅ Mark theme as used if this was the 3rd and final post
+    const remainingPosts = posts.filter(p => !p.posted_at && p.id !== nextPost.id);
+    if (remainingPosts.length === 0) {
+      await db
+        .from('themes')
+        .update({ used: true })
+        .eq('id', currentTheme.id);
+      console.log(`Theme "${currentTheme.name}" marked as used.`);
+    }
+
+    console.log('--- Scheduled Job Completed Successfully ---');
   } catch (error: any) {
     console.error('\n--- Error in Scheduled Job ---');
     console.error('Error message:', error.message);
@@ -98,6 +115,7 @@ async function postTweetToTwitter(text: string) {
 }
 
 runScheduledJob();
+
 
 
 

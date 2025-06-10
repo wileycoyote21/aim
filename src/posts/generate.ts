@@ -6,7 +6,7 @@ import { OpenAI } from "openai";
 const openai = new OpenAI();
 
 interface Theme {
-  id: number;
+  id: string; // Updated from number to string
   name: string;
 }
 
@@ -131,6 +131,7 @@ export async function generatePostsForTheme(db: SupabaseClient, theme: Theme): P
   console.log(`Generated and inserted ${insertedPosts?.length || 0} new posts for theme "${themeName}".`);
   return insertedPosts || [];
 }
+
 
 
 

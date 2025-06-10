@@ -1,120 +1,87 @@
-// scripts/cron.ts
+// src/scripts/cron.ts
 
-import { db } from '../src/db/client';
-import { TwitterApi } from 'twitter-api-v2';
-import { generatePostsForTheme } from '../src/posts/generate';
-import { generateThemeForToday, ThemeResult } from '../src/themes/generator';
+import { createClient } from '@supabase/supabase-js';
+import { generateThemeForToday, ThemeResult } from '../themes/generator';
+import TwitterApi from 'twitter-api-v2';
 
-interface Post {
-  id: string;
-  text: string;
-  theme: string;
-  posted_at: string | null;
-  created_at: string;
-}
+const SUPABASE_URL = process.env.SUPABASE_URL!;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY!;
+const TWITTER_BEARER_TOKEN = process.env.TWITTER_BEARER_TOKEN!;
 
-const twitterClient = new TwitterApi({
-  appKey: process.env.TWITTER_API_KEY as string,
-  appSecret: process.env.TWITTER_API_SECRET as string,
-  accessToken: process.env.TWITTER_ACCESS_TOKEN as string,
-  accessSecret: process.env.TWITTER_ACCESS_TOKEN_SECRET as string,
-});
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-async function runScheduledJob() {
+const twitterClient = new TwitterApi(TWITTER_BEARER_TOKEN);
+
+async function runCron() {
   try {
-    console.log('--- Starting Scheduled Job ---');
     console.log('Supabase Client initialized.');
-    console.log('Twitter Client initialized.');
+    console.log('--- Starting Scheduled Job ---');
 
-    const today = new Date().toISOString().split('T')[0];
-    const currentTheme: ThemeResult = await generateThemeForToday(db, today);
+    // 1. Get today's theme
+    const today = new Date().toISOString().slice(0, 10);
+    const theme: ThemeResult = await generateThemeForToday(supabase, today);
 
-    console.log(`Using theme: "${currentTheme.name}" (ID: ${currentTheme.id})`);
+    // 2. Check how many posts exist for this theme
+    let { data: posts, error: postsError } = await supabase
+      .from('posts')
+      .select('*')
+      .eq('theme', theme.name)
+      .order('created_at', { ascending: true });
 
-    let posts = await generatePostsForTheme(db, currentTheme);
+    if (postsError) throw new Error(`Error fetching posts: ${postsError.message}`);
 
-    // If no posts found for current theme, generate 3 new posts
+    // 3. If no posts for this theme, create 3 new posts (dummy content here — replace with your generation logic)
     if (!posts || posts.length === 0) {
-      console.log(`No posts found for theme "${currentTheme.name}". Generating 3 new posts...`);
-      posts = await generatePostsForTheme(db, currentTheme);
-      if (!posts || posts.length === 0) {
-        throw new Error(`Failed to generate posts for theme "${currentTheme.name}"`);
-      }
+      const newPosts = [
+        { theme: theme.name, content: `${theme.name} post 1`, posted: false },
+        { theme: theme.name, content: `${theme.name} post 2`, posted: false },
+        { theme: theme.name, content: `${theme.name} post 3`, posted: false },
+      ];
+
+      const { error: insertError } = await supabase.from('posts').insert(newPosts);
+      if (insertError) throw new Error(`Error inserting posts: ${insertError.message}`);
+
+      posts = newPosts;
+      console.log(`Created 3 new posts for theme "${theme.name}".`);
     }
 
-    // Find the next post that hasn’t been posted yet
-    const nextPost = posts.find(p => !p.posted_at);
-
+    // 4. Find the next post to publish (first post with posted=false)
+    const nextPost = posts.find(p => !p.posted);
     if (!nextPost) {
-      // All posts posted — mark current theme as used and rotate to next theme on next run
-      console.log(`All posts for theme "${currentTheme.name}" have been posted. Marking theme as used.`);
-
-      const { error: updateThemeError } = await db
+      // All posts posted, mark theme as used and exit (next run picks next theme)
+      const { error: updateThemeError } = await supabase
         .from('themes')
         .update({ used: true })
-        .eq('id', currentTheme.id);
+        .eq('id', theme.id);
 
-      if (updateThemeError) {
-        throw new Error(`Failed to update theme used status: ${JSON.stringify(updateThemeError)}`);
-      }
+      if (updateThemeError) throw new Error(`Error marking theme as used: ${updateThemeError.message}`);
 
-      console.log('Theme marked as used. No tweet this run.');
+      console.log(`All posts published for theme "${theme.name}". Theme marked as used.`);
       return;
     }
 
-    // Post the tweet text
-    console.log(`Posting tweet with Post ID: ${nextPost.id}`);
-    console.log('>>>');
-    console.log(nextPost.text);
-    console.log('<<<');
+    // 5. Post to Twitter
+    await twitterClient.v2.tweet(nextPost.content);
+    console.log(`Posted tweet for theme "${theme.name}": ${nextPost.content}`);
 
-    await postTweetToTwitter(nextPost.text);
-    console.log('Tweet posted successfully!');
-
-    // Mark post as posted
-    const { error: updatePostError } = await db
+    // 6. Mark post as posted
+    const { error: updatePostError } = await supabase
       .from('posts')
-      .update({ posted_at: new Date().toISOString() })
+      .update({ posted: true })
       .eq('id', nextPost.id);
 
-    if (updatePostError) {
-      throw new Error(`Failed to update post status: ${JSON.stringify(updatePostError)}`);
-    }
+    if (updatePostError) throw new Error(`Error marking post as posted: ${updatePostError.message}`);
 
-    console.log(`Post ID ${nextPost.id} marked as posted.`);
-    console.log('--- Scheduled Job Completed Successfully ---');
   } catch (error: any) {
-    console.error('\n--- Error in Scheduled Job ---');
+    console.error('--- Error in Scheduled Job ---');
     console.error('Error message:', error.message);
-    if (error.stack) console.error('Stack trace:', error.stack);
+    console.error('Stack trace:', error.stack);
     console.error('--- End Error ---');
-    process.exit(1);
   }
 }
 
-async function postTweetToTwitter(text: string) {
-  try {
-    if (text.length > 280) {
-      console.warn(`Tweet text is too long (${text.length} characters). It might be truncated.`);
-    }
+runCron();
 
-    try {
-      const { data } = await twitterClient.v2.tweet(text);
-      console.log('Twitter API v2 response:', data);
-      return data;
-    } catch (v2Error: any) {
-      console.log('Twitter API v2 failed, trying v1.1:', v2Error.message);
-      const data = await twitterClient.v1.tweet(text);
-      console.log('Twitter API v1.1 response:', data);
-      return data;
-    }
-  } catch (e: any) {
-    console.error('Error posting tweet:', e);
-    throw e;
-  }
-}
-
-runScheduledJob();
 
 
 

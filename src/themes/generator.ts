@@ -51,8 +51,7 @@ export async function generateThemeForToday(db: SupabaseClient, today: string): 
     if (!unusedThemes || unusedThemes.length === 0) {
       const { error: resetError } = await db
         .from('themes')
-        .update({ used: false })
-        .neq('id', ''); // avoid UPDATE without WHERE error
+        .update({ used: false }); // <--- FIXED HERE: no .neq('id', '') needed
 
       if (resetError) {
         throw new Error(`Error resetting themes: ${JSON.stringify(resetError)}`);
@@ -116,6 +115,7 @@ export async function generateThemeForToday(db: SupabaseClient, today: string): 
     throw new Error(`Error generating theme for today: ${error.message}`);
   }
 }
+
 
 
 

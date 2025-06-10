@@ -35,7 +35,10 @@ const themesList = [
   'happiness', // repeated lighter theme to balance
 ];
 
-export async function generateThemeForToday(db: SupabaseClient, today: string): Promise<ThemeResult> {
+export async function generateThemeForToday(
+  db: SupabaseClient,
+  today: string
+): Promise<ThemeResult> {
   try {
     // Fetch unused themes from DB
     let { data: unusedThemes, error: fetchError } = await db
@@ -51,7 +54,7 @@ export async function generateThemeForToday(db: SupabaseClient, today: string): 
     if (!unusedThemes || unusedThemes.length === 0) {
       const { error: resetError } = await db
         .from('themes')
-        .update({ used: false }); // <--- FIXED HERE: no .neq('id', '') needed
+        .update({ used: false }); // <-- FIX: no WHERE clause needed
 
       if (resetError) {
         throw new Error(`Error resetting themes: ${JSON.stringify(resetError)}`);
@@ -115,6 +118,7 @@ export async function generateThemeForToday(db: SupabaseClient, today: string): 
     throw new Error(`Error generating theme for today: ${error.message}`);
   }
 }
+
 
 
 

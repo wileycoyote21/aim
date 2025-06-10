@@ -1,20 +1,25 @@
+import * as dotenv from 'dotenv';
+dotenv.config();
+
 import { createClient } from '@supabase/supabase-js';
 import { generateThemeForToday, ThemeResult } from '../src/themes/generator';
 import TwitterApi from 'twitter-api-v2';
-import dotenv from 'dotenv';
-
-dotenv.config(); // Load .env variables
 
 const SUPABASE_URL = process.env.SUPABASE_URL!;
 const SUPABASE_KEY = process.env.SUPABASE_KEY!;
 
+const TWITTER_API_KEY = process.env.TWITTER_API_KEY!;
+const TWITTER_API_SECRET = process.env.TWITTER_API_SECRET!;
+const TWITTER_ACCESS_TOKEN = process.env.TWITTER_ACCESS_TOKEN!;
+const TWITTER_ACCESS_TOKEN_SECRET = process.env.TWITTER_ACCESS_TOKEN_SECRET!;
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const twitterClient = new TwitterApi({
-  appKey: process.env.TWITTER_API_KEY!,
-  appSecret: process.env.TWITTER_API_SECRET!,
-  accessToken: process.env.TWITTER_ACCESS_TOKEN!,
-  accessSecret: process.env.TWITTER_ACCESS_TOKEN_SECRET!,
+  appKey: TWITTER_API_KEY,
+  appSecret: TWITTER_API_SECRET,
+  accessToken: TWITTER_ACCESS_TOKEN,
+  accessSecret: TWITTER_ACCESS_TOKEN_SECRET,
 });
 
 async function runCron() {
@@ -23,8 +28,12 @@ async function runCron() {
     console.log('--- Starting Scheduled Job ---');
 
     const today = new Date().toISOString().slice(0, 10);
-    const theme: ThemeResult = await generateThemeForToday(supabase, today);
 
+    // 1. Generate or get today's theme
+    const theme: ThemeResult = await generateThemeForToday(supabase, today);
+    console.log(`Selected theme: ${theme.name}`);
+
+    // 2. Fetch existing posts for this theme
     let { data: posts, error: postsError } = await supabase
       .from('posts')
       .select('*')
@@ -33,6 +42,7 @@ async function runCron() {
 
     if (postsError) throw new Error(`Error fetching posts: ${postsError.message}`);
 
+    // 3. Create 3 new posts if none exist
     if (!posts || posts.length === 0) {
       const newPosts = [
         { theme: theme.name, content: `${theme.name} post 1`, text: `${theme.name} post 1` },
@@ -47,8 +57,10 @@ async function runCron() {
       console.log(`Created 3 new posts for theme "${theme.name}".`);
     }
 
+    // 4. Find the next unposted post
     const nextPost = posts.find(p => !p.posted);
     if (!nextPost) {
+      // Mark theme as used
       const { error: updateThemeError } = await supabase
         .from('themes')
         .update({ used: true })
@@ -60,9 +72,11 @@ async function runCron() {
       return;
     }
 
-    await twitterClient.v1.tweet(nextPost.content);
+    // 5. Post to Twitter
+    await twitterClient.v2.tweet(nextPost.content);
     console.log(`Posted tweet for theme "${theme.name}": ${nextPost.content}`);
 
+    // 6. Mark post as posted
     const { error: updatePostError } = await supabase
       .from('posts')
       .update({ posted: true })
@@ -79,6 +93,7 @@ async function runCron() {
 }
 
 runCron();
+
 
 
 

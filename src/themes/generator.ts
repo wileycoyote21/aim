@@ -1,75 +1,77 @@
-// src/themes/generator.ts
-
 import { SupabaseClient } from '@supabase/supabase-js';
 
-export interface ThemeResult {
+export interface Theme {
   id: string;
   name: string;
+  start_date: string | null;
 }
 
-export async function generateThemeForToday(db: SupabaseClient, today: string): Promise<ThemeResult> {
-  // Step 1: fetch all unused themes
-  let { data: themes, error } = await db
-    .from('themes')
-    .select('*')
-    .eq('used', false);
+// Hardcoded theme list excluding unwanted ones and including lighter themes
+const THEMES: Theme[] = [
+  { id: 'theme-connection', name: 'connection', start_date: null },
+  { id: 'theme-chaos', name: 'chaos', start_date: null },
+  { id: 'theme-memory', name: 'memory', start_date: null },
+  { id: 'theme-time', name: 'time', start_date: null },
+  { id: 'theme-language', name: 'language', start_date: null },
+  { id: 'theme-intuition', name: 'intuition', start_date: null },
+  { id: 'theme-longing', name: 'longing', start_date: null },
+  { id: 'theme-identity', name: 'identity', start_date: null },
+  { id: 'theme-desire', name: 'desire', start_date: null },
+  { id: 'theme-stillness', name: 'stillness', start_date: null },
+  { id: 'theme-doubt', name: 'doubt', start_date: null },
+  { id: 'theme-liminality', name: 'liminality', start_date: null },
+  { id: 'theme-echoes', name: 'echoes', start_date: null },
+  { id: 'theme-control', name: 'control', start_date: null },
+  // lighter themes
+  { id: 'theme-happiness', name: 'happiness', start_date: null },
+  { id: 'theme-joy', name: 'joy', start_date: null },
+  { id: 'theme-surprise', name: 'surprise', start_date: null },
+  { id: 'theme-wonder', name: 'wonder', start_date: null },
+  { id: 'theme-gratitude', name: 'gratitude', start_date: null },
+  { id: 'theme-kindness', name: 'kindness', start_date: null },
+];
 
-  if (error) throw new Error(`Error fetching themes: ${error.message}`);
+export async function generateThemeForToday(db: SupabaseClient): Promise<Theme> {
+  const { data: dbThemes, error } = await db.from('themes').select('id, used');
+  if (error) throw new Error('Error fetching themes from DB: ' + error.message);
 
-  // Step 2: if no unused themes, reset all themes to unused and re-fetch
-  if (!themes || themes.length === 0) {
-    console.log('All themes used — resetting all to unused.');
-    const { error: resetError } = await db
-      .from('themes')
-      .update({ used: false })
-      .or('used.is.true,used.is.false'); // Always-true WHERE clause for Supabase
+  const usedMap = new Map<string, boolean>();
+  dbThemes?.forEach((t) => usedMap.set(t.id, t.used));
 
-    if (resetError) throw new Error(`Error resetting themes: ${resetError.message}`);
+  // Find next unused theme
+  let nextTheme = THEMES.find((t) => !usedMap.get(t.id));
 
-    const { data: resetThemes, error: refetchError } = await db
-      .from('themes')
-      .select('*')
-      .eq('used', false);
+  // If all themes used, reset all used flags and pick first theme
+  if (!nextTheme) {
+    const { error: resetError } = await db.from('themes').update({ used: false }).neq('id', '');
+    if (resetError) throw new Error('Error resetting themes: ' + resetError.message);
 
-    if (refetchError) throw new Error(`Error re-fetching themes: ${refetchError.message}`);
-    if (!resetThemes || resetThemes.length === 0) throw new Error('No themes found after reset.');
-
-    themes = resetThemes;
+    THEMES.forEach((t) => usedMap.set(t.id, false));
+    nextTheme = THEMES[0];
   }
 
-  // Step 3: shuffle themes to randomize order
-  shuffleArray(themes);
-
-  // Step 4: pick first theme with fewer than 3 posts
-  for (const theme of themes) {
-    const { data: posts, error: postError } = await db
-      .from('posts')
-      .select('id')
-      .eq('theme', theme.theme); // Match by theme name
-
-    if (postError) throw new Error(`Error fetching posts for theme ${theme.theme}: ${postError.message}`);
-
-    if ((posts?.length || 0) < 3) {
-      return {
-        id: theme.id,
-        name: theme.theme,
-      };
-    } else {
-      // mark theme as used if it already has 3 or more posts
-      await db.from('themes').update({ used: true }).eq('id', theme.id);
-    }
+  // Insert theme record if missing in DB
+  if (!dbThemes?.some((t) => t.id === nextTheme!.id)) {
+    const { error: insertError } = await db.from('themes').insert([
+      {
+        id: nextTheme!.id,
+        theme: nextTheme!.name,
+        used: false,
+        start_date: nextTheme!.start_date,
+        date: new Date().toISOString(),
+      },
+    ]);
+    if (insertError) throw new Error('Error inserting new theme: ' + insertError.message);
   }
 
-  // fallback, retry in case no theme matched (should rarely happen)
-  return generateThemeForToday(db, today);
+  return nextTheme!;
 }
 
-function shuffleArray(array: any[]) {
-  for (let i = array.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [array[i], array[j]] = [array[j], array[i]];
-  }
+export async function markThemeAsUsed(db: SupabaseClient, themeId: string) {
+  const { error } = await db.from('themes').update({ used: true }).eq('id', themeId);
+  if (error) throw new Error('Error marking theme as used: ' + error.message);
 }
+
 
 
 

@@ -1,9 +1,7 @@
-// scripts/cron.ts
-
 import { db } from '../src/db/client';
 import { TwitterApi } from 'twitter-api-v2';
 import { generatePostsForTheme } from '../src/posts/generate';
-import { generateThemeForToday, ThemeResult } from '../src/themes/generator';
+import { generateThemeForToday, markThemeAsUsed } from '../src/themes/generator';
 
 interface Post {
   id: string;
@@ -26,11 +24,11 @@ async function runScheduledJob() {
     console.log('Supabase Client initialized.');
     console.log('Twitter Client initialized.');
 
-    const today = new Date().toISOString().split('T')[0];
-    const currentTheme: ThemeResult = await generateThemeForToday(db, today);
-
+    // Get next theme to post
+    const currentTheme = await generateThemeForToday(db);
     console.log(`Using theme: "${currentTheme.name}" (ID: ${currentTheme.id})`);
 
+    // Get or generate posts for theme
     let posts = await generatePostsForTheme(db, currentTheme);
 
     if (!posts || posts.length === 0) {
@@ -38,17 +36,17 @@ async function runScheduledJob() {
       posts = await generatePostsForTheme(db, currentTheme);
     }
 
+    // Find next unposted post
     const nextPost = posts.find(p => !p.posted_at);
 
     if (!nextPost) {
-      console.warn(`All posts for theme "${currentTheme.name}" have been posted. No tweet this run.`);
+      console.log(`All posts for theme "${currentTheme.name}" have been posted.`);
 
-      // ✅ Mark theme as used so the next one is selected next run
-      await db
-        .from('themes')
-        .update({ used: true })
-        .eq('id', currentTheme.id);
+      // Mark theme as used in DB and rotate to next theme next run
+      await markThemeAsUsed(db, currentTheme.id);
+      console.log(`Theme "${currentTheme.name}" marked as used.`);
 
+      // Exit early, next cron run will pick next theme and posts
       return;
     }
 
@@ -60,6 +58,7 @@ async function runScheduledJob() {
     await postTweetToTwitter(nextPost.text);
     console.log('Tweet posted successfully!');
 
+    // Update post as posted_at now
     const { error: updateError } = await db
       .from('posts')
       .update({ posted_at: new Date().toISOString() })
@@ -71,18 +70,8 @@ async function runScheduledJob() {
     }
 
     console.log(`Post ID ${nextPost.id} marked as posted.`);
-
-    // ✅ Mark theme as used if this was the 3rd and final post
-    const remainingPosts = posts.filter(p => !p.posted_at && p.id !== nextPost.id);
-    if (remainingPosts.length === 0) {
-      await db
-        .from('themes')
-        .update({ used: true })
-        .eq('id', currentTheme.id);
-      console.log(`Theme "${currentTheme.name}" marked as used.`);
-    }
-
     console.log('--- Scheduled Job Completed Successfully ---');
+
   } catch (error: any) {
     console.error('\n--- Error in Scheduled Job ---');
     console.error('Error message:', error.message);
@@ -115,6 +104,7 @@ async function postTweetToTwitter(text: string) {
 }
 
 runScheduledJob();
+
 
 
 

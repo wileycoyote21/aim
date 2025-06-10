@@ -1,7 +1,7 @@
 // src/scripts/cron.ts
 
 import { createClient } from '@supabase/supabase-js';
-import { generateThemeForToday, ThemeResult } from '../themes/generator';
+import { generateThemeForToday, ThemeResult } from '../src/themes/generator';
 import TwitterApi from 'twitter-api-v2';
 
 const SUPABASE_URL = process.env.SUPABASE_URL!;

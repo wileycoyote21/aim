@@ -4,10 +4,10 @@ import { generateThemeForToday, ThemeResult } from '../src/themes/generator';
 import { TwitterApi } from 'twitter-api-v2';
 
 const SUPABASE_URL = process.env.SUPABASE_URL!;
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY!;
+const SUPABASE_KEY = process.env.SUPABASE_KEY!;
 const TWITTER_BEARER_TOKEN = process.env.TWITTER_BEARER_TOKEN!;
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const twitterClient = new TwitterApi(TWITTER_BEARER_TOKEN);
 
 async function runCron() {

@@ -44,7 +44,7 @@ export async function generateThemeForToday(db: SupabaseClient, today: string): 
     const { data: posts, error: postError } = await db
       .from('posts')
       .select('id')
-      .eq('theme_id', theme.id);
+      .eq('theme', theme.theme);  // <-- FIXED here
 
     if (postError) throw new Error(`Error fetching posts for theme ${theme.theme}: ${postError.message}`);
 
@@ -69,6 +69,7 @@ function shuffleArray(array: any[]) {
     [array[i], array[j]] = [array[j], array[i]];
   }
 }
+
 
 
 

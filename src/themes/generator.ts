@@ -1,5 +1,3 @@
-// src/themes/generator.ts
-
 import { v4 as uuidv4 } from 'uuid';
 import { SupabaseClient } from '@supabase/supabase-js';
 
@@ -11,7 +9,6 @@ export interface ThemeResult {
   date: string;
 }
 
-// Themes list
 const themesList = [
   'connection',
   'happiness',
@@ -37,7 +34,7 @@ const themesList = [
 
 export async function generateThemeForToday(db: SupabaseClient, today: string): Promise<ThemeResult> {
   try {
-    // Fetch unused themes from DB
+    // Fetch unused themes
     let { data: unusedThemes, error: fetchError } = await db
       .from('themes')
       .select('*')
@@ -47,32 +44,37 @@ export async function generateThemeForToday(db: SupabaseClient, today: string): 
       throw new Error(`Error fetching unused themes: ${JSON.stringify(fetchError)}`);
     }
 
-    // If no unused themes, reset all to unused first
+    // If no unused themes, reset all themes to unused
     if (!unusedThemes || unusedThemes.length === 0) {
-      // IMPORTANT: Add a WHERE clause to satisfy Postgres
       const { error: resetError } = await db
         .from('themes')
-        .update({ used: false })
-        .neq('id', '');  // This updates all rows with a non-empty id
+        .update({ used: false });  // <--- FIXED: no filter, update all rows
 
       if (resetError) {
         throw new Error(`Error resetting themes: ${JSON.stringify(resetError)}`);
       }
 
       // Fetch unused themes again after reset
-      const { data, error } = await db.from('themes').select('*').eq('used', false);
+      const { data, error } = await db
+        .from('themes')
+        .select('*')
+        .eq('used', false);
+
       if (error) {
         throw new Error(`Error fetching themes after reset: ${JSON.stringify(error)}`);
       }
       unusedThemes = data || [];
     }
 
-    // Pick first unused theme
+    // Pick first unused theme from DB
     let currentTheme = unusedThemes[0];
 
-    // If none found in DB, insert missing theme from the code list
+    // If no theme found, insert missing themes from code list
     if (!currentTheme) {
-      const { data: allThemesInDb, error: allError } = await db.from('themes').select('theme');
+      const { data: allThemesInDb, error: allError } = await db
+        .from('themes')
+        .select('theme');
+
       if (allError) {
         throw new Error(`Error fetching all themes: ${JSON.stringify(allError)}`);
       }
@@ -81,7 +83,7 @@ export async function generateThemeForToday(db: SupabaseClient, today: string): 
       const nextThemeName = themesList.find(t => !dbThemes.includes(t));
 
       if (!nextThemeName) {
-        // If all themes exist and none unused, fallback to first code theme with new UUID
+        // All themes exist but none unused, fallback to first theme in list
         return {
           id: uuidv4(),
           name: themesList[0],
@@ -99,7 +101,10 @@ export async function generateThemeForToday(db: SupabaseClient, today: string): 
         date: new Date().toISOString(),
       };
 
-      const { error: insertError } = await db.from('themes').insert([newTheme]);
+      const { error: insertError } = await db
+        .from('themes')
+        .insert([newTheme]);
+
       if (insertError) {
         throw new Error(`Error inserting new theme: ${JSON.stringify(insertError)}`);
       }
@@ -107,7 +112,6 @@ export async function generateThemeForToday(db: SupabaseClient, today: string): 
       currentTheme = newTheme;
     }
 
-    // Return theme info in the expected format
     return {
       id: currentTheme.id,
       name: currentTheme.theme,
@@ -119,6 +123,7 @@ export async function generateThemeForToday(db: SupabaseClient, today: string): 
     throw new Error(`Error generating theme for today: ${error.message}`);
   }
 }
+
 
 
 

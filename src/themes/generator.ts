@@ -22,7 +22,7 @@ export async function generateThemeForToday(db: SupabaseClient, today: string): 
     const { error: resetError } = await db
       .from('themes')
       .update({ used: false })
-      .neq('id', ''); // Required by Supabase to update all rows
+      .or('used.is.true,used.is.false'); // Always-true WHERE clause for Supabase
 
     if (resetError) throw new Error(`Error resetting themes: ${resetError.message}`);
 

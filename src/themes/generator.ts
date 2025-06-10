@@ -21,7 +21,8 @@ export async function generateThemeForToday(db: SupabaseClient, today: string): 
     console.log('All themes used — resetting all to unused.');
     const { error: resetError } = await db
       .from('themes')
-      .update({ used: false });
+      .update({ used: false })
+      .neq('id', ''); // Required by Supabase to update all rows
 
     if (resetError) throw new Error(`Error resetting themes: ${resetError.message}`);
 
@@ -44,7 +45,7 @@ export async function generateThemeForToday(db: SupabaseClient, today: string): 
     const { data: posts, error: postError } = await db
       .from('posts')
       .select('id')
-      .eq('theme', theme.theme);  // <-- FIXED here
+      .eq('theme', theme.theme); // Match by theme name
 
     if (postError) throw new Error(`Error fetching posts for theme ${theme.theme}: ${postError.message}`);
 
@@ -69,6 +70,7 @@ function shuffleArray(array: any[]) {
     [array[i], array[j]] = [array[j], array[i]];
   }
 }
+
 
 
 

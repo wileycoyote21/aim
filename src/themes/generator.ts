@@ -11,7 +11,7 @@ export interface ThemeResult {
   date: string;
 }
 
-// Mixed list of themes with lighter ones evenly distributed
+// Themes list
 const themesList = [
   'connection',
   'happiness',
@@ -35,10 +35,7 @@ const themesList = [
   'happiness', // repeated lighter theme to balance
 ];
 
-export async function generateThemeForToday(
-  db: SupabaseClient,
-  today: string
-): Promise<ThemeResult> {
+export async function generateThemeForToday(db: SupabaseClient, today: string): Promise<ThemeResult> {
   try {
     // Fetch unused themes from DB
     let { data: unusedThemes, error: fetchError } = await db
@@ -50,17 +47,19 @@ export async function generateThemeForToday(
       throw new Error(`Error fetching unused themes: ${JSON.stringify(fetchError)}`);
     }
 
-    // Reset all themes to unused if none available
+    // If no unused themes, reset all to unused first
     if (!unusedThemes || unusedThemes.length === 0) {
+      // IMPORTANT: Add a WHERE clause to satisfy Postgres
       const { error: resetError } = await db
         .from('themes')
-        .update({ used: false }); // <-- FIX: no WHERE clause needed
+        .update({ used: false })
+        .neq('id', '');  // This updates all rows with a non-empty id
 
       if (resetError) {
         throw new Error(`Error resetting themes: ${JSON.stringify(resetError)}`);
       }
 
-      // Fetch again after reset
+      // Fetch unused themes again after reset
       const { data, error } = await db.from('themes').select('*').eq('used', false);
       if (error) {
         throw new Error(`Error fetching themes after reset: ${JSON.stringify(error)}`);
@@ -68,20 +67,21 @@ export async function generateThemeForToday(
       unusedThemes = data || [];
     }
 
-    // Pick first unused theme from DB
+    // Pick first unused theme
     let currentTheme = unusedThemes[0];
 
-    // Insert missing theme from code list if needed
+    // If none found in DB, insert missing theme from the code list
     if (!currentTheme) {
       const { data: allThemesInDb, error: allError } = await db.from('themes').select('theme');
       if (allError) {
         throw new Error(`Error fetching all themes: ${JSON.stringify(allError)}`);
       }
+
       const dbThemes = allThemesInDb?.map(t => t.theme) || [];
       const nextThemeName = themesList.find(t => !dbThemes.includes(t));
 
       if (!nextThemeName) {
-        // All themes exist in DB but none unused, fallback to first code theme
+        // If all themes exist and none unused, fallback to first code theme with new UUID
         return {
           id: uuidv4(),
           name: themesList[0],
@@ -107,6 +107,7 @@ export async function generateThemeForToday(
       currentTheme = newTheme;
     }
 
+    // Return theme info in the expected format
     return {
       id: currentTheme.id,
       name: currentTheme.theme,
@@ -118,6 +119,7 @@ export async function generateThemeForToday(
     throw new Error(`Error generating theme for today: ${error.message}`);
   }
 }
+
 
 
 
